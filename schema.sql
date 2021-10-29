@@ -50,10 +50,10 @@ CREATE TABLE Managers (
 -- health declaration
 CREATE TABLE Health_declarations (
     eid INTEGER,
-    date DATE,
+    hdate DATE,
     temp FLOAT(2) CHECK (temp >= 34.0 AND temp <= 43.0),
     fever BOOLEAN,
-    PRIMARY KEY (eid, date),
+    PRIMARY KEY (eid, hdate),
     FOREIGN KEY (eid) REFERENCES Employees(eid)
 );
 
@@ -68,10 +68,10 @@ CREATE TABLE Contacts (
 -- meeting rooms (locates in)
 CREATE TABLE Meeting_Rooms (
     room    INTEGER,
-    floor   INTEGER,
+    mfloor   INTEGER,
     rname   VARCHAR(100),
     did     INTEGER NOT NULL,
-    PRIMARY KEY (room, floor),
+    PRIMARY KEY (room, mfloor),
     FOREIGN KEY (did) REFERENCES Departments(did)
 );
 
@@ -79,24 +79,24 @@ CREATE TABLE Meeting_Rooms (
 CREATE TABLE Updates (
     manager_id  INTEGER NOT NULL,
     room        INTEGER,
-    floor       INTEGER,
-    date        DATE,
+    ufloor       INTEGER,
+    udate        DATE,
     new_cap     INTEGER,
-    PRIMARY KEY (manager_id, room, floor, date),
+    PRIMARY KEY (manager_id, room, ufloor, udate),
     FOREIGN KEY (manager_id) REFERENCES Managers (eid),
-    FOREIGN KEY (room, floor) REFERENCES Meeting_Rooms (room, floor)
+    FOREIGN KEY (room, ufloor) REFERENCES Meeting_Rooms (room, mfloor)
 );
 
 -- session (with rname, with books, with manager)
 CREATE TABLE Sessions (
     room    INTEGER,
-    floor   INTEGER,
-    time    TIME,
-    date    DATE,
+    sfloor   INTEGER,
+    stime    TIME,
+    sdate    DATE,
     booker_id INTEGER NOT NULL,
     manager_id INTEGER UNIQUE,
-    PRIMARY KEY (room, floor, time, date),
-    FOREIGN KEY (room, floor) REFERENCES Meeting_Rooms (room, floor) ON DELETE CASCADE,
+    PRIMARY KEY (room, sfloor, stime, sdate),
+    FOREIGN KEY (room, sfloor) REFERENCES Meeting_Rooms (room, mfloor) ON DELETE CASCADE,
     FOREIGN KEY (booker_id) REFERENCES Bookers (eid) ON DELETE CASCADE,
     FOREIGN KEY (manager_id) REFERENCES Managers (eid) ON DELETE CASCADE
 );
@@ -105,15 +105,15 @@ CREATE TABLE Sessions (
 CREATE TABLE Joins (
     eid     INTEGER NOT NULL,
     room    INTEGER,     
-    floor   INTEGER,
-    time    TIME,
-    date    DATE,
-    PRIMARY KEY (eid, room, floor, time, date),
+    jfloor   INTEGER,
+    jtime    TIME,
+    jdate    DATE,
+    PRIMARY KEY (eid, room, jfloor, jtime, jdate),
     FOREIGN KEY (eid) REFERENCES Employees (eid),
-    FOREIGN KEY (room, floor, time, date) REFERENCES Sessions (room, floor, time, date),
+    FOREIGN KEY (room, jfloor, jtime, jdate) REFERENCES Sessions (room, sfloor, stime, sdate),
     -- check date and time is future
     CONSTRAINT join_future_meeting CHECK (
-        date > now()::date
-        OR date = now()::date AND time > now()::time
+        jdate > now()::date
+        OR jdate = now()::date AND jtime > now()::time
     )
 );
