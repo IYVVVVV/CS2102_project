@@ -10,7 +10,7 @@ CREATE TABLE Departments (
 
 -- employee (works in)
 CREATE TABLE Employees (
-    eid INTEGER,
+    eid SERIAL,
     ename VARCHAR(50) NOT NULL,
     email VARCHAR(50) UNIQUE NOT NULL,
     resigned_date DATE,
@@ -27,28 +27,28 @@ CREATE TABLE Employees (
 CREATE TABLE Juniors (
     eid INTEGER,
     PRIMARY KEY(eid),
-    FOREIGN KEY(eid) REFERENCES Employees(eid) ON DELETE CASCADE
+    FOREIGN KEY(eid) REFERENCES Employees(eid) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- booker
 CREATE TABLE Bookers (
     eid INTEGER,
     PRIMARY KEY(eid),
-    FOREIGN KEY(eid) REFERENCES Employees(eid) ON DELETE CASCADE
+    FOREIGN KEY(eid) REFERENCES Employees(eid) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- senior
 CREATE TABLE Seniors (
     eid INTEGER,
     PRIMARY KEY(eid),
-    FOREIGN KEY(eid) REFERENCES Bookers(eid) ON DELETE CASCADE
+    FOREIGN KEY(eid) REFERENCES Bookers(eid) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- manager 
 CREATE TABLE Managers (
     eid INTEGER,
     PRIMARY KEY(eid),
-    FOREIGN KEY(eid) REFERENCES Bookers(eid) ON DELETE CASCADE
+    FOREIGN KEY(eid) REFERENCES Bookers(eid) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- health declaration
@@ -58,20 +58,20 @@ CREATE TABLE Health_declarations (
     htemp FLOAT(2),
     fever BOOLEAN,
     PRIMARY KEY (eid, hdate),
-    FOREIGN KEY (eid) REFERENCES Employees(eid),
+    FOREIGN KEY (eid) REFERENCES Employees(eid) ON UPDATE CASCADE,
     -- temperature should be in reasonable range
     CONSTRAINT proper_htemp CHECK (htemp >= 34.0 AND htemp <= 43.0),
-    -- -- fever only if htemp >= 38.0
+    -- -- fever only if htemp >= 37.5
     CONSTRAINT derive_fever_correctly CHECK (
-        (htemp < 38.0 AND fever = FALSE) OR (htemp >= 38.0 and fever = TRUE))
+        (htemp < 37.5 AND fever = FALSE) OR (htemp >= 37.5 and fever = TRUE))
 );
 
 -- contacts
 CREATE TABLE Contacts (
     eid INTEGER,
-    contact TEXT NOT NULL,
+    contact char(8) NOT NULL,
     PRIMARY KEY(eid, contact),
-    FOREIGN KEY (eid) REFERENCES Employees(eid),
+    FOREIGN KEY (eid) REFERENCES Employees(eid) ON DELETE CASCADE,
     -- contact number should be an 8 digits text
     CONSTRAINT proper_contact CHECK (contact ~* '^[0-9]{8}$')
 );

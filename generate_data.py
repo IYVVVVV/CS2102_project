@@ -41,8 +41,8 @@ def get_random_employee_name():
     name = ' '.join([first_name, mid_name, last_name]) if mid_name != '' else ' '.join([first_name, last_name])
     return name
 
-def get_email(name):
-    return ''.join(name.strip().split(' ')).lower() + '@gmail.com'
+def get_email(name, eid):
+    return ''.join(name.strip().split(' ')).lower() + '_' + str(eid) + '@gmail.com'
 
 def get_random_contact_number():
     return ''.join([choice(NUMBERS) for i in range(8)])
@@ -57,13 +57,13 @@ def get_random_prev_date():
     return prevdate, prevdate_str
 
 def get_random_normal_temp():
-    temp = 38.0
-    while temp == 38.0:
-        temp = round(uniform(34.0, 38.0), 1)
+    temp = 37.5
+    while temp == 37.5:
+        temp = round(uniform(34.0, 37.5), 1)
     return temp
 
 def get_random_fever_temp():
-    return round(uniform(38.0, 43.0), 1)
+    return round(uniform(37.5, 43.0), 1)
 
 def create_employees(datafile):
     # add data into table Employees, Juniors, Bookers, Seniors, Managers, and also Contacts
@@ -77,9 +77,9 @@ def create_employees(datafile):
     for eid in range(1, 31):
         employee_ids.append(eid)
         ename = get_random_employee_name()
-        email = get_email(ename)
+        email = get_email(ename, eid)
         did = choice(department_ids)
-        resigned_date = 'NULL'
+        resigned_date_str = 'NULL'
         if 1 <= eid % 10 <= 3:
             resigned_eployee_ids.append(eid)
             resigned_date, resigned_date_str = get_random_prev_date()
@@ -88,8 +88,8 @@ def create_employees(datafile):
         else:
             current_employee_ids.append(eid)
 
-        cmd_e += f'insert into Employees(eid, ename, email, resigned_date, did) '\
-                + f'values ({eid}, \'{ename}\', \'{email}\', {resigned_date_str}, {did});\n'
+        cmd_e += f'insert into Employees(ename, email, resigned_date, did) '\
+                + f'values (\'{ename}\', \'{email}\', {resigned_date_str}, {did});\n'
         if 1 <= eid <= 10:
             cmd_j += f'insert into Juniors(eid) values ({eid});\n'
         else:
@@ -133,7 +133,7 @@ def create_health_declarations(datafile):
 
     # we design the data such that resigned employee declare daily before they resign
     # current employee with eid ending with 4 fail to declare on 11.2 (2 days ago)
-    # current employee with eid ending with 5 gets fever on 11.3 with temperature > 38.0 (1 day ago)
+    # current employee with eid ending with 5 gets fever on 11.3 with temperature > 37.5 (1 day ago)
     cmd = ''
     for eid in current_employee_ids:
         for d in range(8):
@@ -143,7 +143,7 @@ def create_health_declarations(datafile):
             # current employee with eid ending with 4 fail to declare on 11.2 (2 days ago)
             if eid % 4 == 0 and d == 2:
                 continue
-            # current employee with eid ending with 5 gets fever on 11.3 with temperature > 38.0 (1 day ago)
+            # current employee with eid ending with 5 gets fever on 11.3 with temperature > 37.5 (1 day ago)
             if eid % 5 == 0 and d == 1:
                 htemp = get_random_fever_temp()
                 fever = 'TRUE'
@@ -151,7 +151,7 @@ def create_health_declarations(datafile):
                 + f'values ({eid}, \'{hdate}\', \'{htemp}\', {fever});\n'
     # print(resigned_tuples)
     for eid, resigned_date in resigned_tuples:
-        min_d = (datetime.datetime.now() - resigned_date).days + 1
+        min_d = (datetime.datetime.now() - resigned_date).days
         for d in range(min_d, 8):
             hdate = (datetime.datetime.now() - datetime.timedelta(d)).strftime('%Y-%m-%d')
             htemp = get_random_normal_temp()
