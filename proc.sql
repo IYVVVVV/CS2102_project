@@ -1,17 +1,17 @@
 /* 
- * Basic_1: add a new resignment
+ * Basic_1: add a new department
  * input: 
  * output:
  */
-create or replace function add_resignment
+create or replace function add_department
 
 
 /* 
- * Basic_2: remove a resignment
+ * Basic_2: remove a department
  * input: 
  * output:
  */
-create or replace function remove_resignment
+create or replace function remove_department
 
 
 /* 
