@@ -10,13 +10,13 @@ CREATE TABLE Departments (
 
 -- employee (works in)
 CREATE TABLE Employees (
-	eid INTEGER,
-	ename VARCHAR(50) NOT NULL,
-	email VARCHAR(50) UNIQUE NOT NULL,
-	resigned_date DATE,
-	did INTEGER NOT NULL,
-	PRIMARY KEY(eid),
-	FOREIGN KEY(did) REFERENCES Departments(did),
+    eid INTEGER,
+    ename VARCHAR(50) NOT NULL,
+    email VARCHAR(50) UNIQUE NOT NULL,
+    resigned_date DATE,
+    did INTEGER NOT NULL,
+    PRIMARY KEY(eid),
+    FOREIGN KEY(did) REFERENCES Departments(did),
     -- email should be in form 'xxx@yyy.zzz'
     CONSTRAINT proper_email CHECK (email ~* '^[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$'),
     -- resigned_date should either be NULL, or some previous date
@@ -131,7 +131,7 @@ CREATE TABLE Joins (
 
 -- booking
 NewSessionBook {
-    newsid 	        INTEGER,
+    newsid          INTEGER,
     booker          INTEGER,
     sessionRoom     INTEGER,
     sessionFloor    INTEGER
@@ -145,11 +145,11 @@ NewSessionBook {
 
 -- meeting room capacity
 CREATE TABLE MeetingRoomCapacity {
-    room	INTEGER,
-    mfloor	INTEGER,
-    mdate 	DATE,
-    mtime 	TIME,
-    mcapacity 	INTEGER,
+    room    INTEGER,
+    mfloor  INTEGER,
+    mdate   DATE,
+    mtime   TIME,
+    mcapacity   INTEGER,
     PRIMARY KEY (room, mfloor, mdate, mtime),
     FOREIGN KEY (room) REFERENCES Meeting_Rooms (room),
     FOREIGN KEY (mfloor) REFERENCES Meeting_Rooms (mfloor)
