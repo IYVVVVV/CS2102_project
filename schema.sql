@@ -4,19 +4,23 @@ DROP TABLE IF EXISTS
 -- department
 CREATE TABLE Departments (
     did     INTEGER,
-    dname   VARCHAR(100),
+    dname   VARCHAR(100) NOT NULL,
     PRIMARY KEY (did)
 );
 
 -- employee (works in)
 CREATE TABLE Employees (
 	eid INTEGER,
-	ename VARCHAR(50),
-	email VARCHAR(50) UNIQUE,
+	ename VARCHAR(50) NOT NULL,
+	email VARCHAR(50) UNIQUE NOT NULL,
 	resigned_date DATE,
 	did INTEGER NOT NULL,
 	PRIMARY KEY(eid),
-	FOREIGN KEY(did) REFERENCES Departments(did)
+	FOREIGN KEY(did) REFERENCES Departments(did),
+    -- email should be in form 'xxx@yyy.zzz'
+    CONSTRAINT proper_email CHECK (email ~* '^[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$'),
+    -- resigned_date should either be NULL, or some previous date
+    CONSTRAINT proper_resigned_date CHECK (resigned_date IS NULL OR resigned_date <= now()::date)
 );
 
 -- junior
@@ -50,19 +54,26 @@ CREATE TABLE Managers (
 -- health declaration
 CREATE TABLE Health_declarations (
     eid INTEGER,
-    hdate DATE,
-    temp FLOAT(2) CHECK (temp >= 34.0 AND temp <= 43.0),
+    hdate DATE,  -- not null since primary
+    htemp FLOAT(2),
     fever BOOLEAN,
     PRIMARY KEY (eid, hdate),
-    FOREIGN KEY (eid) REFERENCES Employees(eid)
+    FOREIGN KEY (eid) REFERENCES Employees(eid),
+    -- temperature should be in reasonable range
+    CONSTRAINT proper_htemp CHECK (htemp >= 34.0 AND htemp <= 43.0),
+    -- -- fever only if htemp >= 38.0
+    CONSTRAINT derive_fever_correctly CHECK (
+        (htemp < 38.0 AND fever = FALSE) OR (htemp >= 38.0 and fever = TRUE))
 );
 
 -- contacts
 CREATE TABLE Contacts (
     eid INTEGER,
-    contact TEXT,
+    contact TEXT NOT NULL,
     PRIMARY KEY(eid, contact),
-    FOREIGN KEY (eid) REFERENCES Employees(eid)
+    FOREIGN KEY (eid) REFERENCES Employees(eid),
+    -- contact number should be an 8 digits text
+    CONSTRAINT proper_contact CHECK (contact ~* '^[0-9]{8}$')
 );
 
 -- meeting rooms (locates in)
