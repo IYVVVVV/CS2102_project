@@ -149,7 +149,22 @@ create or replace function unbook_room
  * input: 
  * output:
  */
-create or replace function join_meeting
+CREATE OR REPLACE PROCEDURE JoinMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour INT, IN end_hour INT, IN eid INT) AS $$
+DECLARE 
+    temp INT := start_hour;
+BEGIN
+    WHILE temp > end_hour LOOP
+        IF EXISTS (SELECT sessionRoom, sessionFloor, ndate, ntime 
+                FROM NewSessionBook 
+                WHERE sessionRoom = room_number AND sessionFloor = floor_number AND ndate = meeting_date AND ntime = temp)
+            AND NOT EXISTS (SELECT h.eid, fever
+                        FROM Health_declarations h
+                        WHERE h.eid = eid and fever = true) THEN
+            INSERT INTO Joins VALUES (eid, meeting_room, floor_number, cast(convert（varchar(8),temp）as time), meeting_date);
+        temp := temp + 10000;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
 
 
 /* 
@@ -157,7 +172,19 @@ create or replace function join_meeting
  * input: 
  * output:
  */
-create or replace function leave_meeting
+CREATE OR REPLACE PROCEDURE LeaveMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour INT, IN end_hour INT, IN eid INT) AS $$
+DECLARE 
+    temp INT := start_hour;
+BEGIN
+    WHILE temp > end_hour LOOP
+        IF EXISTS (SELECT sessionRoom, sessionFloor, ndate, ntime 
+                FROM NewSessionBook 
+                WHERE sessionRoom = room_number AND sessionFloor = floor_number AND ndate = meeting_date AND ntime = temp) THEN
+            DELETE FROM Joins WHERE Joins.eid = eid AND Joins.room = room_number AND Joins.jfloor = floor_number AND Joins.jtime = cast(convert（varchar(8),temp）as time) AND Joins.jdate = meeting_date;
+        temp := temp + 10000;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
 
 
 /* 
@@ -197,7 +224,18 @@ create or replace function non_compliance
  * input: 
  * output:
  */
-create or replace function view_booking_report
+CREATE OR REPLACE FUNCTION ViewBookingReport (IN sdate DATE, IN eid INT) 
+RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartTime TIME, StartHour INT, Approved VARCHAR(20)) AS $$
+    SELECT sfloor AS FloorNumber, room AS RoomNumber, sdate AS MeetingDate, stime AS StartTime, convert(int, cast(stime as varchar(8))) AS StartHour, CASE
+        WHEN EXISTS (SELECT sessionRoom, sessionFloor, ndate, ntime 
+                    FROM NewSessionBook 
+                    WHERE sessionRoom = room AND sessionFloor = sfloor AND ndate = sdate AND ntime = stime) THEN 'No'
+        ELSE 'Yes'
+    END AS Approved
+    FROM Sessions
+    WHERE Sessions.booker_id = eid AND Sessions.sdate > sdate
+    ORDER BY sdate ASC, stime ASC;
+$$ LANGUAGE sql;
 
 
 /* 
@@ -205,7 +243,16 @@ create or replace function view_booking_report
  * input: 
  * output:
  */
-create or replace function view_future_meeting
+CREATE OR REPLACE FUNCTION ViewFutureMeeting (IN sdate DATE, IN eid INT) 
+RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartTime TIME, StartHour INT) AS $$
+    SELECT sfloor AS FloorNumber, room AS RoomNumber, sdate AS MeetingDate, stime AS StartTime, convert(int, cast(stime as varchar(8))) AS StartHour
+    FROM Sessions
+    WHERE Sessions.booker_id = eid AND Sessions.sdate > sdate AND NOT EXISTS (SELECT sessionRoom, sessionFloor, ndate, ntime 
+                    FROM NewSessionBook 
+                    WHERE sessionRoom = room AND sessionFloor = sfloor AND ndate = sdate AND ntime = stime)
+    ORDER BY sdate ASC, stime ASC;
+$$ LANGUAGE sql;
+
 
 
 /* 
