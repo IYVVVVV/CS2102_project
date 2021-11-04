@@ -130,7 +130,7 @@ CREATE TABLE Joins (
 );
 
 -- booking
-NewSessionBook {
+CREATE TABLE NewSessionBook {
     newsid          INTEGER,
     booker          INTEGER,
     sessionRoom     INTEGER,
