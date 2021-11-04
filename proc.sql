@@ -146,8 +146,8 @@ create or replace function unbook_room
 
 /* 
  * Core_4: join a booked meeting room
- * input: 
- * output:
+ * input: floor_number, room_number, meeting_date, start_hour, end_hour, eid
+ * output: null cause a procedure
  */
 CREATE OR REPLACE PROCEDURE JoinMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour INT, IN end_hour INT, IN eid INT) AS $$
 DECLARE 
@@ -169,8 +169,8 @@ $$ LANGUAGE plpgsql;
 
 /* 
  * Core_5: leave a booked meeting room
- * input: 
- * output:
+ * input: floor_number, room_number, meeting_date, start_hour, end_hour, eid
+ * output: null cause a procedure
  */
 CREATE OR REPLACE PROCEDURE LeaveMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour INT, IN end_hour INT, IN eid INT) AS $$
 DECLARE 
@@ -221,8 +221,8 @@ create or replace function non_compliance
 
 /* 
  * Admin_2: used by employee to find all meeting rooms that are booked by the employee
- * input: 
- * output:
+ * input: sdate, eid
+ * output: floor_number, room_number, meeting_date, start_time, start_hour, approved
  */
 CREATE OR REPLACE FUNCTION ViewBookingReport (IN sdate DATE, IN eid INT) 
 RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartTime TIME, StartHour INT, Approved VARCHAR(20)) AS $$
@@ -240,8 +240,8 @@ $$ LANGUAGE sql;
 
 /* 
  * Admin_3:  used by employee to find all future meetings this employee is going to have that are already approved.
- * input: 
- * output:
+ * input: sdate, eid
+ * output: floor_number, room_number, meeting_date, start_time, start_hour
  */
 CREATE OR REPLACE FUNCTION ViewFutureMeeting (IN sdate DATE, IN eid INT) 
 RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartTime TIME, StartHour INT) AS $$
