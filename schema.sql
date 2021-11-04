@@ -129,29 +129,3 @@ CREATE TABLE Joins (
     )
 );
 
--- booking
-NewSessionBook {
-    newsid          INTEGER,
-    booker          INTEGER,
-    sessionRoom     INTEGER,
-    sessionFloor    INTEGER
-    ndate           DATE,
-    ntime           TIME,
-    PRIMARY KEY (newsid),
-    FOREIGN KEY (booker) REFERENCES Employees (eid),
-    FOREIGN KEY (sessionRoom) REFERENCES Meeting_Rooms (room),
-    FOREIGN KEY (sessionFloor) REFERENCES MeetingRooms (mfloor)
-}
-
--- meeting room capacity
-CREATE TABLE MeetingRoomCapacity {
-    room    INTEGER,
-    mfloor  INTEGER,
-    mdate   DATE,
-    mtime   TIME,
-    mcapacity   INTEGER,
-    PRIMARY KEY (room, mfloor, mdate, mtime),
-    FOREIGN KEY (room) REFERENCES Meeting_Rooms (room),
-    FOREIGN KEY (mfloor) REFERENCES Meeting_Rooms (mfloor)
-}
-
