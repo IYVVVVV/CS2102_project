@@ -476,7 +476,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION ViewFutureMeeting (IN sdate DATE, IN id INT) 
 RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartHour Time) AS $$
 DECLARE
-    current_eid INNT;
+    current_eid INT;
 BEGIN
     SELECT eid INTO current_eid FROM Employees WHERE eid = id;
     IF current_eid IS NULL THEN
@@ -496,20 +496,24 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE FUNCTION view_manager_report (IN start_date DATE, IN eid INT)
+CREATE OR REPLACE FUNCTION view_manager_report (IN start_date DATE, IN _eid INT)
 RETURNS TABLE(Floor INT, Room INT, Date DATE, Start_hour TIME, EmpID INT) AS $$
 DECLARE
-		mng_did INT;
+	mng_did INT;
+    current_eid INT;
 BEGIN
-		IF eid IN (SELECT eid FORM Managers) THEN
-		    SELECT did INTO mng_did FROM Managers WHERE Managers.eid=eid;
-			 RETURNS QUERY
-			   	SELECT sfloor, room, sdate, stime, booker_id
-			    FROM Sessions NATURAL JOIN Meeting_Rooms
-			    WHERE Meeting_Rooms.did= mng_did AND sdate >= start_date AND manager_id=eid
-                ORDERED BY sdate, stime;
-		ELSE
-			RETURN;
-		END IF
+    SELECT eid INTO current_eid FROM Managers WHERE eid = _eid;
+    IF current_eid IS NULL THEN
+        raise exception 'View Failed. There is no manager with such id.';
+    END IF;
+
+    SELECT did INTO mng_did FROM Employees WHERE eid = _eid;
+
+	RETURN QUERY
+	   	SELECT sfloor, s.room as room, sdate, stime, booker_id
+	    FROM Sessions as s, Meeting_Rooms as m
+	    WHERE m.did= mng_did AND s.sdate >= start_date AND s.manager_id is NULL
+              and s.room = m.room and s.sfloor = m.mfloor
+        ORDER BY sdate ASC, stime ASC;
 END;
 $$ LANGUAGE plpgsql;
