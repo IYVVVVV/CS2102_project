@@ -448,23 +448,24 @@ create or replace function non_compliance
  * input: sdate, eid
  * output: floor_number, room_number, meeting_date, start_time, start_hour, approved
  */
-CREATE OR REPLACE FUNCTION ViewBookingReport (IN sdate DATE, IN eid INT) 
-RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartHour TIME, Approved VARCHAR(20)) AS $$
+CREATE OR REPLACE FUNCTION view_booking_report (IN _sdate DATE, IN _eid INT) 
+RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartHour TIME, Is_Approved BOOLEAN) AS $$
 DECLARE
-    current_eid INNT;
+    current_eid INT;
 BEGIN
-    SELECT eid INTO current_eid FROM Employees WHERE eid = id;
+    SELECT eid INTO current_eid FROM Employees WHERE eid = _eid;
     IF current_eid IS NULL THEN
         raise exception 'View Failed. There is no employee with such id.';
     ELSE
         RETURN QUERY
             SELECT sfloor AS FloorNumber, room AS RoomNumber, sdate AS MeetingDate, stime AS StartHour, CASE
-                WHEN s.manager_id IS NULL THEN 'No'
-                ELSE 'Yes'
-                END AS Approved
+                WHEN s.manager_id IS NULL THEN FALSE
+                ELSE TRUE
+                END AS Is_Approved
             FROM Sessions s
-            WHERE s.booker_id = eid AND s.sdate > sdate
+            WHERE s.booker_id = _eid AND s.sdate > _sdate
             ORDER BY sdate ASC, stime ASC;
+    END IF;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -473,7 +474,7 @@ $$ LANGUAGE plpgsql;
  * input: sdate, eid
  * output: floor_number, room_number, meeting_date, start_time, start_hour
  */
-CREATE OR REPLACE FUNCTION view_future_meeting (IN sdate DATE, IN id INT) 
+CREATE OR REPLACE FUNCTION view_future_meeting (IN _sdate DATE, IN id INT) 
 RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartHour Time) AS $$
 DECLARE
     current_eid INT;
@@ -485,7 +486,7 @@ BEGIN
         RETURN QUERY
             SELECT sfloor AS FloorNumber, room AS RoomNumber, sdate AS MeetingDate, stime AS StartHour
             FROM Sessions s
-            WHERE s.booker_id = id AND s.sdate >= sdate AND s.manager_id IS NOT NULL
+            WHERE s.booker_id = id AND s.sdate >= _sdate AND s.manager_id IS NOT NULL
             ORDER BY sdate ASC, stime ASC;
     END IF;
 END;
