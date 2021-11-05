@@ -1,10 +1,21 @@
+CREATE OR REPLACE FUNCTION is_resigned(IN _eid INT)
+RETURNS BOOLEAN AS $$
+DECLARE
+    rdate DATE;
+BEGIN 
+    SELECT resigned_date INTO rdate FROM Employees WHERE Employees.eid=_eid;
+    RETURN rdate is NOT NULL AND rdate<=now()::date;
+END;
+$$ LANGUAGE plpgsql;
+
+
 /* 
  * Basic_1: add a new department
  * input: 
  * output:
  */
-CREATE OR REPLACE PROCEDURE add_department (IN _did INT, IN _name VARCHAR(100))
-AS $$
+CREATE OR REPLACE FUNCTION add_department (IN _did INT, IN _name VARCHAR(100))
+RETURNS INT AS $$
 declare 
     current_did int;
 begin
@@ -14,6 +25,7 @@ begin
     end if;
 
 	INSERT INTO Departments VALUES (_did, _name);
+    return 0;
 end;
 $$ LANGUAGE plpgsql;
 
@@ -23,23 +35,28 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE PROCEDURE remove_department (IN _did INT)
-AS $$
+CREATE OR REPLACE function remove_department (IN _did INT)
+RETURNS INT AS $$
 declare 
     current_did int;
+    emps record;
 begin
     select did into current_did from Departments where did = _did;
     if current_did is NULL then
         raise exception 'Remove failed. There is no department with such id.';
     end if;
 
-	FOR emps IN SELECT eid FROM Employees WHERE Employees.did=_did LOOP
-		IF SELECT IsResigned(emps) THEN
-			RAISE 'Some employees in this department % is not removed yet', _did;
-		END IF；
+	FOR emps IN SELECT * FROM Employees WHERE Employees.did=_did LOOP
+		IF is_resigned(emps.eid) THEN
+			RAISE 'Remove failed. Some employees in this department % is not removed yet', _did;
+		END IF;
 	END LOOP;
+    IF (SELECT count(*) FROM Meeting_Rooms WHERE Meeting_Rooms.did=_did ) <> 0 THEN
+        RAISE 'Remove failed. Delete all meeting rooms inside department % before deleting the department!', _did;
+    END IF;
 
     DELETE FROM Departments WHERE Departments.did = _did;
+    return 0;
 end;
 $$ LANGUAGE plpgsql;
 
@@ -123,11 +140,11 @@ declare
 begin
     -- check kind
     if (_kind <> 'junior' and _kind <> 'senior' and _kind <> 'manager') then
-        raise exception 'Invalid employee job kind, should be junior, senior or manager.';
+        raise exception 'Add failed. Invalid employee job kind, should be junior, senior or manager.';
     end if;
     -- check contact numbers
     if _contact_numbers is NULL then
-        raise exception 'At least one contact number is required.';
+        raise exception 'Add failed. At least one contact number is required.';
     end if;
 
     insert into Employees(ename, email, resigned_date, did) values (_ename, current_email, NULL, _did) returning eid into current_eid;
@@ -169,10 +186,9 @@ declare
     current_eid int;
     num_records int := 0;
     old_resigned_date date;
+    session_to_remove record;
 begin
-    num_records := 0;
     select eid from Employees where eid = _eid into current_eid;
-    
     if current_eid is null then
         raise exception 'Remove failed. No employee with the given eid.';
     end if;
@@ -192,9 +208,19 @@ begin
     end if;
         
     update Employees set resigned_date = _resigned_date where eid = _eid;
-
-    -- remove his booking session ans all joins
     
+    -- remove his booking session ans all joins
+    -- remove joins first
+    FOR session_to_remove IN SELECT * FROM Sessions WHERE Sessions.booker_id=_eid LOOP
+        delete from Joins as j where j.room = session_to_remove.room and j.jfloor = session_to_remove.sfloor 
+                                and j.jtime = session_to_remove.stime and j.jdate = session_to_remove.sdate;
+    END LOOP;
+    -- remove sessions then
+    delete from Sessions where Sessions.booker_id = _eid;
+
+    --rollback approval for meetings if eid is the manager who approved the meeting
+    update Sessions set manager_id = NULL where manager_id = _eid;
+
     return 0;
 
 end;
@@ -219,7 +245,7 @@ BEGIN
 	, Sessions s
 	WHERE u.new_cap >= _capacity
 	AND NOT (s.room = r.room AND s.sfloor = r.mfloor AND s.sdate = _date AND s.stime >= _start_hour AND s.stime < _end_hour);
-END
+END;
 $$ LANGUAGE plpgsql
 
 
@@ -289,7 +315,7 @@ BEGIN
 		current_hour := current_hour + '1 hour';
 	END LOOP;
 	RETURN 0;
-END
+END;
 $$ LANGUAGE plpgsql
 
 /* 
@@ -307,7 +333,7 @@ BEGIN
 	AND s.stime >= _start_hour
 	AND s.stime < _end_hour;
 	RETURN 0;
-END
+END;
 $$ LANGUAGE plpgsql
 
 /* 
@@ -397,45 +423,31 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE FUNCTION IsResigned(IN eid INT)
-RETURNS BOOLEAN AS $$
-DECLARE
-    rdate DATE;
-BEGIN 
-    SELECT resign_date INTO rdate FROM Employees WHERE Employees.eid=eid;
-	RETURN rdate NOT NULL AND rdate<=now()::date;
-END;
-$$ LANGUAGE plpgsql;
-
-
-CREATE OR REPLACE PROCEDURE approve_meeting (IN floor_num INT, room_num INT, IN date DATE, IN start_hour TIME, IN end_hour TIME, IN booker_eid INT, IN approve_eid INT) 
-AS $$
+CREATE OR REPLACE function approve_meeting (IN floor_num INT, room_num INT, IN date DATE, IN start_hour TIME, IN end_hour TIME, IN booker_eid INT, IN approve_eid INT) 
+RETURNS INT AS $$
 DECLARE 
 	mng_did INT; expect_did INT; rdate DATE;
 BEGIN
 	SELECT did INTO mng_did FROM Managers WHERE eid=approve_eid;
 	IF mng_did IS NULL THEN
-		RAISE 'The given eid % is not a manager!', approve_eid
-		USING HINT = 'Please check the manager eid';
+		RAISE 'The given eid % is not a manager!', approve_eid;
 	END IF;
 	
-	IF SELECT IsResigned(approve_eid) THEN 
-        RAISE 'Manager % is resigned!', approve_eid
-		USING HINT = 'Please check the manager eid';
-    END　IF;
+	IF is_resigned(approve_eid) THEN 
+        RAISE 'Manager % is resigned!', approve_eid;
+    END IF;
     
-    SELECT did INTO expect_did FROM Meeting_Rooms WHERE mfloor=floor_num, Room=room_num;
+    SELECT did INTO expect_did FROM Meeting_Rooms WHERE mfloor=floor_num and Room=room_num;
 	IF expect_did IS NULL THEN
 		RAISE 'The given room % in % floor does not exist!', room_num, floor_num;
-		USING HINT = 'Please Check the room and floor';
 	END IF;
 
     IF mng_did=expect_eid THEN
-        INSERT INTO Sessions VALUES(room_num, floor_num, start_hour, booker_eid, approve_eid)
+        INSERT INTO Sessions VALUES(room_num, floor_num, start_hour, booker_eid, approve_eid);
 	ELSE 
-		RAISE 'The given manager % is not in charge of this room', approve_eid
-		USING HINT = 'Please check the manager and the room';
-    END IF；
+		RAISE 'The given manager % is not in charge of this room', approve_eid;
+    END IF;
+    return 0;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -444,24 +456,25 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE FUNCTION declare_health (IN eid INT, IN ddate DATE, IN temp FLOAT(2))
-AS $$
+CREATE OR REPLACE FUNCTION declare_health (IN _eid INT, IN ddate DATE, IN temp FLOAT(2))
+RETURNS INT AS $$
 DECLARE 
 	fever BOOLEAN;
 BEGIN
-	IF eid NOT IN (SELECT eid FROM Employees)  THEN
-		RAISE 'The given eid % does not exist!', eid
+	IF _eid NOT IN (SELECT eid FROM Employees)  THEN
+		RAISE 'The given eid % does not exist!', _eid
 		USING HINT = 'Please check the eid';
 	END IF;
-	IF SELECT IsResigned(eid) THEN
-		RAISE 'Empoloyee % is resigned!', eid
+	IF is_resigned(_eid) THEN
+		RAISE 'Empoloyee % is resigned!', _eid
 		USING HINT = 'Please check the eid';
 	END IF;
 	fever = CASE
 		WHEN temp>=37.5 THEN TRUE
 		WHEN temp <37.5 THEN FALSE
 	END;
-	INSERT INTO Health_declarations VALUES (eid, ddate, temperature, fever);
+	INSERT INTO Health_declarations VALUES (_eid, ddate, temp, fever);
+    return 0;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -487,24 +500,25 @@ create or replace function non_compliance
  * input: sdate, eid
  * output: floor_number, room_number, meeting_date, start_time, start_hour, approved
  */
-CREATE OR REPLACE FUNCTION ViewBookingReport (IN sdate DATE, IN eid INT) 
-RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartHour TIME, Approved VARCHAR(20)) AS $$
+CREATE OR REPLACE FUNCTION view_booking_report (IN _sdate DATE, IN _eid INT) 
+RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartHour TIME, Is_Approved BOOLEAN) AS $$
 DECLARE
-    current_eid INNT;
+    current_eid INT;
 BEGIN
-    SELECT eid INTO current_eid FROM Employees WHERE eid = id;
+    SELECT eid INTO current_eid FROM Employees WHERE eid = _eid;
     IF current_eid IS NULL THEN
         raise exception 'View Failed. There is no employee with such id.';
     ELSE
         RETURN QUERY
             SELECT sfloor AS FloorNumber, room AS RoomNumber, sdate AS MeetingDate, stime AS StartHour, CASE
-                WHEN s.manager_id IS NULL THEN 'No'
-                ELSE 'Yes'
-                END AS Approved
+                WHEN s.manager_id IS NULL THEN FALSE
+                ELSE TRUE
+                END AS Is_Approved
             FROM Sessions s
-            WHERE s.booker_id = eid AND s.sdate > sdate
+            WHERE s.booker_id = _eid AND s.sdate > _sdate
             ORDER BY sdate ASC, stime ASC;
-END
+    END IF;
+END;
 $$ LANGUAGE plpgsql;
 
 /* 
@@ -512,10 +526,10 @@ $$ LANGUAGE plpgsql;
  * input: sdate, eid
  * output: floor_number, room_number, meeting_date, start_time, start_hour
  */
-CREATE OR REPLACE FUNCTION ViewFutureMeeting (IN sdate DATE, IN id INT) 
+CREATE OR REPLACE FUNCTION view_future_meeting (IN _sdate DATE, IN id INT) 
 RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartHour Time) AS $$
 DECLARE
-    current_eid INNT;
+    current_eid INT;
 BEGIN
     SELECT eid INTO current_eid FROM Employees WHERE eid = id;
     IF current_eid IS NULL THEN
@@ -524,9 +538,10 @@ BEGIN
         RETURN QUERY
             SELECT sfloor AS FloorNumber, room AS RoomNumber, sdate AS MeetingDate, stime AS StartHour
             FROM Sessions s
-            WHERE s.booker_id = id AND s.sdate > sdate AND s.manager_id IS NOT NULL
+            WHERE s.booker_id = id AND s.sdate >= _sdate AND s.manager_id IS NOT NULL
             ORDER BY sdate ASC, stime ASC;
-END
+    END IF;
+END;
 $$ LANGUAGE plpgsql;
 
 
@@ -535,20 +550,24 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE FUNCTION view_manager_report (IN start_date DATE, IN eid INT)
+CREATE OR REPLACE FUNCTION view_manager_report (IN start_date DATE, IN _eid INT)
 RETURNS TABLE(Floor INT, Room INT, Date DATE, Start_hour TIME, EmpID INT) AS $$
 DECLARE
-		mng_did INT;
+	mng_did INT;
+    current_eid INT;
 BEGIN
-		IF eid IN (SELECT eid FORM Managers) THEN
-		    SELECT did INTO mng_did FROM Managers WHERE Managers.eid=eid;
-			 RETURNS QUERY
-			   	SELECT sfloor, room, sdate, stime, booker_id
-			    FROM Sessions NATURAL JOIN Meeting_Rooms
-			    WHERE Meeting_Rooms.did= mng_did AND sdate >= start_date AND manager_id=eid
-                ORDERED BY sdate, stime;
-		ELSE
-			RETURN;
-		END IF
+    SELECT eid INTO current_eid FROM Managers WHERE eid = _eid;
+    IF current_eid IS NULL THEN
+        raise exception 'View Failed. There is no manager with such id.';
+    END IF;
+
+    SELECT did INTO mng_did FROM Employees WHERE eid = _eid;
+
+	RETURN QUERY
+	   	SELECT sfloor, s.room as room, sdate, stime, booker_id
+	    FROM Sessions as s, Meeting_Rooms as m
+	    WHERE m.did= mng_did AND s.sdate >= start_date AND s.manager_id is NULL
+              and s.room = m.room and s.sfloor = m.mfloor
+        ORDER BY sdate ASC, stime ASC;
 END;
 $$ LANGUAGE plpgsql;
