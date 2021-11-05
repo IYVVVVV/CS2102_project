@@ -35,7 +35,7 @@ begin
 
 	FOR emps IN SELECT eid FROM Employees WHERE Employees.did=_did LOOP
 		IF SELECT IsResigned(emps) THEN
-			RAISE 'Some employees in this department % is not removed yet', _did;
+			RAISE 'Remove failed. Some employees in this department % is not removed yet', _did;
 		END IF；
 	END LOOP;
 
@@ -95,11 +95,11 @@ declare
 begin
     -- check kind
     if (_kind <> 'junior' and _kind <> 'senior' and _kind <> 'manager') then
-        raise exception 'Invalid employee job kind, should be junior, senior or manager.';
+        raise exception 'Add failed. Invalid employee job kind, should be junior, senior or manager.';
     end if;
     -- check contact numbers
     if _contact_numbers is NULL then
-        raise exception 'At least one contact number is required.';
+        raise exception 'Add failed. At least one contact number is required.';
     end if;
 
     insert into Employees(ename, email, resigned_date, did) values (_ename, current_email, NULL, _did) returning eid into current_eid;
@@ -141,10 +141,9 @@ declare
     current_eid int;
     num_records int := 0;
     old_resigned_date date;
+    session_to_remove record;
 begin
-    num_records := 0;
     select eid from Employees where eid = _eid into current_eid;
-    
     if current_eid is null then
         raise exception 'Remove failed. No employee with the given eid.';
     end if;
@@ -164,9 +163,19 @@ begin
     end if;
         
     update Employees set resigned_date = _resigned_date where eid = _eid;
-
-    -- remove his booking session ans all joins
     
+    -- remove his booking session ans all joins
+    -- remove joins first
+    FOR session_to_remove IN SELECT * FROM Sessions WHERE Sessions.booker_id=_eid LOOP
+        delete from Joins as j where j.room = session_to_remove.room and j.jfloor = session_to_remove.sfloor 
+                                and j.jtime = session_to_remove.stime and j.jdate = session_to_remove.sdate;
+    END LOOP;
+    -- remove sessions then
+    delete from Sessions where Sessions.booker_id = _eid;
+
+    --rollback approval for meetings if eid is the manager who approved the meeting
+    update Sessions set manager_id = NULL where manager_id = _eid;
+
     return 0;
 
 end;
