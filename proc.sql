@@ -344,7 +344,18 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-create or replace function declare_health
+CREATE OR REPLACE FUNCTION declare_health (IN eid INT, IN ddate DATE, IN temp FLOAT(2))
+AS $$
+DECLARE 
+	fever BOOLEAN;
+BEGIN
+	fever = CASE
+		WHEN temp>=37.5 THEN TRUE
+		WHEN temp <37.5 THEN FALSE
+	END;
+	INSERT INTO Health_declarations VALUES (eid, ddate, temperature, fever);
+END
+$$ LANGUAGE plpgsql;
 
 
 /* 
