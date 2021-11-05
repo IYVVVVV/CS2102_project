@@ -50,9 +50,9 @@ def get_random_contact_number():
 def get_random_prev_date():
     # get a random date in previous 1 year range
     # we assume all resignation happened from 5 days ago to 3 days ago
-    currdate = datetime.datetime.now()  # '2021-11-04'
+    currdate = datetime.datetime.now()  # '2021-11-05'
     currdate_str = currdate.strftime('%Y-%m-%d')
-    prevdate = currdate - datetime.timedelta(randint(3, 5)) # i.e. 10.30-11.1
+    prevdate = currdate - datetime.timedelta(randint(3, 5)) # i.e. 10.31-11.2
     prevdate_str = prevdate.strftime('%Y-%m-%d')  # eg. '2021-10-31'
     return prevdate, prevdate_str
 
@@ -134,24 +134,24 @@ def create_employees(datafile):
 
 def create_health_declarations(datafile):
     # add data into Health_declarations
-    # we record the recent 1 week declaration (10.28-11.4)
+    # we record the recent 1 week declaration (10.29-11.5)
 
-    # since all resignation happened 5 days ago to 3 days ago (10.30, 10.31, 11.1),
-    # any record in 11.2-11.4 should not include them, but 10.28-10.29 must have them if they declare
+    # since all resignation happened 5 days ago to 3 days ago (10.31, 11.1, 11.2),
+    # any record in 11.3-11.5 should not include them, but 10.29-10.30 must have them if they declare
 
     # we design the data such that resigned employee declare daily before they resign
-    # current employee with eid ending with 4 fail to declare on 11.2 (2 days ago)
-    # current employee with eid ending with 5 gets fever on 11.3 with temperature > 37.5 (1 day ago)
+    # current employee with eid ending with 4 fail to declare on 11.3 (2 days ago)
+    # current employee with eid ending with 5 gets fever on 11.4 with temperature > 37.5 (1 day ago)
     cmd = ''
     for eid in current_employee_ids:
         for d in range(8):
             hdate = (datetime.datetime.now() - datetime.timedelta(d)).strftime('%Y-%m-%d')
             htemp = get_random_normal_temp()
             fever = 'FALSE'
-            # current employee with eid ending with 4 fail to declare on 11.2 (2 days ago)
+            # current employee with eid ending with 4 fail to declare on 11.3 (2 days ago)
             if eid % 4 == 0 and d == 2:
                 continue
-            # current employee with eid ending with 5 gets fever on 11.3 with temperature > 37.5 (1 day ago)
+            # current employee with eid ending with 5 gets fever on 11.4 with temperature > 37.5 (1 day ago)
             if eid % 5 == 0 and d == 1:
                 htemp = get_random_fever_temp()
                 fever = 'TRUE'
@@ -171,6 +171,7 @@ def create_health_declarations(datafile):
     datafile.write('\n')
         
 def create_departments(datafile):
+    # we have department 1 - 10
     datafile.write('--Departments\n')
     for did in range(1, 11):
         department_ids.append(did)
@@ -197,15 +198,15 @@ def create_meeting_rooms(datafile):
     datafile.write('\n')
 
 def get_random_room_cap_date(did):
-    # each room allows 1 - 2 people
+    # each room allows 1 - 2 people initially
     cap = 2 if did % 2 == 0 else 1
-    currdate = datetime.datetime.now()  # '2021-11-04'
+    currdate = datetime.datetime.now()  # '2021-11-05'
     prevdate = currdate - datetime.timedelta(randint(7, 14))
-    prevdate_str = prevdate.strftime('%Y-%m-%d')  # eg. '2021-10-31'
+    prevdate_str = prevdate.strftime('%Y-%m-%d')
     return cap, prevdate, prevdate_str
 
 def create_updates(datafile):
-    # every manager has update twice for the room from the same department
+    # every manager has updated twice for the room from the same department
     # cap1 = 1/2; cap2 = 2 * cap1
     # all date will be earlier than 7 days ago to prevent resignation
     datafile.write('--Updates\n')
