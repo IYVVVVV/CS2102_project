@@ -228,13 +228,64 @@ $$ LANGUAGE plpgsql
  * input: 
  * output:
  */
-CREATE OR REPLACE FUNCTION book_room (_room_num INTEGER, _room_floor INTEGER, _start_hour TIME, _end_hour TIME, _session_date DATE, _booker_id INTEGER, _manager_id INTEGER)
+CREATE OR REPLACE FUNCTION IsResigned(IN _eid INTEGER)
+RETURNS BOOLEAN AS $$
+DECLARE
+    rdate DATE;
+BEGIN 
+    SELECT resigned_date INTO rdate FROM Employees WHERE Employees.eid = _eid;
+	RETURN rdate IS NOT NULL AND rdate<=now()::date;
+END;
+$$ LANGUAGE plpgsql;
+ 
+CREATE OR REPLACE FUNCTION book_room (_room_num INTEGER, _room_floor INTEGER, _start_hour TIME, _end_hour TIME, _session_date DATE, _booker_id INTEGER)
 RETURNS INT AS $$
 DECLARE
 	current_hour TIME := _start_hour;
+	each_hour TIME[];
+	var_hour TIME;
+	start_hour_ok INTEGER := 0;
+	end_hour_ok INTEGER := 0;
+	has_been_booked INTEGER := 0;
 BEGIN
+	-- check future meetings
+	IF _session_date < now()::DATE OR (_session_date = now()::DATE AND _start_hour < now()::TIME) THEN
+		RAISE EXCEPTION 'A booking can only be made for future meetings';
+	END IF;
+	-- check room exists
+	IF NOT EXISTS (SELECT 1 FROM Updates u WHERE u.room = _room_num AND u.ufloor = _room_floor) THEN 
+		RAISE EXCEPTION 'The input room does not exist.';
+	END IF;
+	-- check for start and end hour
+	each_hour := '{00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00,
+                  07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 
+                  13:00, 14:00, 15:00, 16:00, 17:00, 18:00,
+                  19:00, 20:00, 21:00, 22:00, 23:00, 24:00}'::TIME[];
+	FOREACH var_hour IN ARRAY each_hour LOOP
+		IF var_hour = _start_hour THEN
+			start_hour_ok := 1;
+		END IF;
+		IF var_hour = _end_hour THEN
+			end_hour_ok := 1;
+		END IF;
+	END LOOP;
+	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
+		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
+	END IF;
+	-- check booker has not resigned
+	IF IsResigned(_booker_id) THEN 
+        RAISE EXCEPTION 'Booker has resigned!';
+    END IF;
+	-- check the session has not been booked
+	SELECT 1 INTO has_been_booked
+	FROM Sessions s 
+	WHERE s.room = _room_num AND s.sfloor = _room_floor AND s.sdate = _session_date AND s.stime >= _start_hour AND s.stime < _end_hour;
+	IF has_been_booked = 1 THEN
+		RAISE EXCEPTION 'The session has been booked!';
+	END IF;
+	
 	WHILE current_hour < _end_hour LOOP
-		INSERT INTO Sessions VALUES (_room_num, _room_floor, current_hour, _session_date, _booker_id, _manager_id);
+		INSERT INTO Sessions VALUES (_room_num, _room_floor, current_hour, _session_date, _booker_id, NULL);
 		current_hour := current_hour + '1 hour';
 	END LOOP;
 	RETURN 0;
