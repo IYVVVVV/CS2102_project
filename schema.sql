@@ -61,9 +61,11 @@ CREATE TABLE Health_declarations (
     FOREIGN KEY (eid) REFERENCES Employees(eid) ON UPDATE CASCADE,
     -- temperature should be in reasonable range
     CONSTRAINT proper_htemp CHECK (htemp >= 34.0 AND htemp <= 43.0),
-    -- -- fever only if htemp >= 37.5
+    -- fever only if htemp >= 37.5
     CONSTRAINT derive_fever_correctly CHECK (
-        (htemp < 37.5 AND fever = FALSE) OR (htemp >= 37.5 and fever = TRUE))
+        (htemp < 37.5 AND fever = FALSE) OR (htemp >= 37.5 and fever = TRUE)),
+    -- cannot declare a future health condition
+    CONSTRAINT disallow_future_declaration CHECK (hdate <= now()::date)
 );
 
 -- contacts

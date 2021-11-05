@@ -408,24 +408,24 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE FUNCTION declare_health (IN eid INT, IN ddate DATE, IN temp FLOAT(2))
+CREATE OR REPLACE FUNCTION declare_health (IN _eid INT, IN ddate DATE, IN temp FLOAT(2))
 RETURNS INT AS $$
 DECLARE 
 	fever BOOLEAN;
 BEGIN
-	IF eid NOT IN (SELECT eid FROM Employees)  THEN
-		RAISE 'The given eid % does not exist!', eid
+	IF _eid NOT IN (SELECT eid FROM Employees)  THEN
+		RAISE 'The given eid % does not exist!', _eid
 		USING HINT = 'Please check the eid';
 	END IF;
-	IF is_resigned(eid) THEN
-		RAISE 'Empoloyee % is resigned!', eid
+	IF is_resigned(_eid) THEN
+		RAISE 'Empoloyee % is resigned!', _eid
 		USING HINT = 'Please check the eid';
 	END IF;
 	fever = CASE
 		WHEN temp>=37.5 THEN TRUE
 		WHEN temp <37.5 THEN FALSE
 	END;
-	INSERT INTO Health_declarations VALUES (eid, ddate, temperature, fever);
+	INSERT INTO Health_declarations VALUES (_eid, ddate, temp, fever);
     return 0;
 END;
 $$ LANGUAGE plpgsql;
