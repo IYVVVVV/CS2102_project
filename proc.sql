@@ -48,12 +48,25 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE FUNCTION add_room(_room_num INTEGER, _room_floor INTEGER, _room_name varchar(100), _room_capacity INTEGER, _did INTEGER, _manager_id INTEGER, _update_date DATE);
+CREATE OR REPLACE FUNCTION add_room(_room_num INTEGER, _room_floor INTEGER, _room_name varchar(100), _room_capacity INTEGER, _did INTEGER, _manager_id INTEGER, _update_date DATE)
 RETURNS INT AS $$
+DECLARE
+	manager_did INT;
 BEGIN
-	-- some check
-	
-	
+	-- check did is valid
+	IF NOT EXISTS (SELECT 1 FROM Departments d WHERE d.did = _did) THEN 
+		RAISE EXCEPTION 'Input did is not a valid did';
+	END IF;
+	-- check manager is valid
+	IF NOT EXISTS (SELECT 1 FROM Managers m WHERE m.eid = _manager_id) THEN 
+		RAISE EXCEPTION 'Input eid is not a manager id';
+	END IF;
+	-- check manager is in the department
+	SELECT did INTO manager_did FROM Managers NATURAL JOIN Employees WHERE eid = _manager_id;
+	IF (_did <> manager_did) THEN
+		RAISE EXCEPTION 'Manager from different department cannot change meeting room capacity.';
+	END IF;
+	-- update the Meeting_Rooms and Updates tables
 	INSERT INTO Meeting_Rooms VALUES (_room_num, _room_floor, _room_name, _did);
 	INSERT INTO Updates(manager_id, room, ufloor, udate, new_cap) VALUES (_manager_id, _room_num, _room_floor, _update_date, _room_capacity);
 	RETURN 0;
@@ -68,9 +81,24 @@ $$ LANGUAGE plpgsql;
  */
 CREATE OR REPLACE FUNCTION change_capacity(_manager_id INTEGER, _room_num INTEGER, _room_floor INTEGER, _new_capacity INTEGER, _update_date DATE)
 RETURNS INT AS $$
+DECLARE
+	manager_did INT;
+	room_did INT;
 BEGIN
-	-- some check
-	
+	-- check room exists
+	IF NOT EXISTS (SELECT 1 FROM Updates u WHERE u.room = _room_num AND u.ufloor = _room_floor) THEN 
+		RAISE EXCEPTION 'The input room does not exist.';
+	END IF;
+	-- check manager is valid
+	IF NOT EXISTS (SELECT 1 FROM Managers m WHERE m.eid = _manager_id) THEN 
+		RAISE EXCEPTION 'Input eid is not a manager id.';
+	END IF;
+	-- check manager is in the department
+	SELECT did INTO room_did FROM Meeting_Rooms r WHERE r.room = _room_num AND r.mfloor = _room_floor;
+	SELECT did INTO manager_did FROM Managers NATURAL JOIN Employees WHERE eid = _manager_id;
+	IF (room_did <> manager_did) THEN
+		RAISE EXCEPTION 'Manager from different department cannot change meeting room capacity.';
+	END IF;
 	-- update the Updates table
 	UPDATE Updates
 	SET manager_id = _manager_id, udate = _update_date, new_cap = _new_capacity
@@ -379,6 +407,14 @@ AS $$
 DECLARE 
 	fever BOOLEAN;
 BEGIN
+	IF eid NOT IN (SELECT eid FROM Employees)  THEN
+		RAISE 'The given eid % does not exist!', eid
+		USING HINT = 'Please check the eid';
+	END IF;
+	IF SELECT IsResigned(eid) THEN
+		RAISE 'Empoloyee % is resigned!', eid
+		USING HINT = 'Please check the eid';
+	END IF;
 	fever = CASE
 		WHEN temp>=37.5 THEN TRUE
 		WHEN temp <37.5 THEN FALSE
