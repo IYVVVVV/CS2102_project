@@ -372,34 +372,31 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE PROCEDURE approve_meeting (IN floor_num INT, room_num INT, IN date DATE, IN start_hour TIME, IN end_hour TIME, IN booker_eid INT, IN approve_eid INT) 
-AS $$
+CREATE OR REPLACE function approve_meeting (IN floor_num INT, room_num INT, IN date DATE, IN start_hour TIME, IN end_hour TIME, IN booker_eid INT, IN approve_eid INT) 
+RETURNS INT AS $$
 DECLARE 
 	mng_did INT; expect_did INT; rdate DATE;
 BEGIN
 	SELECT did INTO mng_did FROM Managers WHERE eid=approve_eid;
 	IF mng_did IS NULL THEN
-		RAISE 'The given eid % is not a manager!', approve_eid
-		USING HINT = 'Please check the manager eid';
+		RAISE 'The given eid % is not a manager!', approve_eid;
 	END IF;
 	
-	IF SELECT is_resigned(approve_eid) THEN 
-        RAISE 'Manager % is resigned!', approve_eid
-		USING HINT = 'Please check the manager eid';
-    END　IF;
+	IF is_resigned(approve_eid) THEN 
+        RAISE 'Manager % is resigned!', approve_eid;
+    END IF;
     
-    SELECT did INTO expect_did FROM Meeting_Rooms WHERE mfloor=floor_num, Room=room_num;
+    SELECT did INTO expect_did FROM Meeting_Rooms WHERE mfloor=floor_num and Room=room_num;
 	IF expect_did IS NULL THEN
 		RAISE 'The given room % in % floor does not exist!', room_num, floor_num;
-		USING HINT = 'Please Check the room and floor';
 	END IF;
 
     IF mng_did=expect_eid THEN
-        INSERT INTO Sessions VALUES(room_num, floor_num, start_hour, booker_eid, approve_eid)
+        INSERT INTO Sessions VALUES(room_num, floor_num, start_hour, booker_eid, approve_eid);
 	ELSE 
-		RAISE 'The given manager % is not in charge of this room', approve_eid
-		USING HINT = 'Please check the manager and the room';
-    END IF；
+		RAISE 'The given manager % is not in charge of this room', approve_eid;
+    END IF;
+    return 0;
 END;
 $$ LANGUAGE plpgsql;
 
