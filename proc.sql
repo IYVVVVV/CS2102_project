@@ -3,10 +3,18 @@
  * input: 
  * output:
  */
-CREATE OR REPLACE PROCEDURE add_department (IN did INT, IN ame VARCHAR(100))
+CREATE OR REPLACE PROCEDURE add_department (IN _did INT, IN _name VARCHAR(100))
 AS $$
-	INSERT INTO Departments VALUES (did,ame);
-$$ LANGUAGE sql;
+declare current_did int;
+begin
+    select did into current_did from Departments where did = _did;
+    if current_did is not NULL then
+        raise exception 'Add failed. There is already a department with such id.';
+    end if;
+
+	INSERT INTO Departments VALUES (_did, _name);
+end;
+$$ LANGUAGE plpgsql;
 
 
 /* 
@@ -14,16 +22,24 @@ $$ LANGUAGE sql;
  * input: 
  * output:
  */
-CREATE OR REPLACE PROCEDURE remove_department (IN did INT)
+CREATE OR REPLACE PROCEDURE remove_department (IN _did INT)
 AS $$
-	FOR emps IN SELECT eid FROM Employees WHERE Employees.did=did LOOP
+declare current_did int;
+begin
+    select did into current_did from Departments where did = _did;
+    if current_did is NULL then
+        raise exception 'Remove failed. There is no department with such id.';
+    end if;
+
+	FOR emps IN SELECT eid FROM Employees WHERE Employees.did=_did LOOP
 		IF SELECT IsResigned(emps) THEN
-			RAISE 'Some employees in this department % is not removed yet', did;
+			RAISE 'Some employees in this department % is not removed yet', _did;
 		END IF；
 	END LOOP;
 
-DELETE FROM Departments WHERE Departments.did=did;
-$$ LANGUAGE sql;
+    DELETE FROM Departments WHERE Departments.did = _did;
+end;
+$$ LANGUAGE plpgsql;
 
 /* 
  * Basic_3: add a new meeting room
