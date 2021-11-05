@@ -19,7 +19,17 @@ create or replace function remove_department
  * input: 
  * output:
  */
-create or replace function add_room
+CREATE OR REPLACE FUNCTION add_room(_room_num INTEGER, _room_floor INTEGER, _room_name varchar(100), _room_capacity INTEGER, _did INTEGER, _manager_id INTEGER, _update_date DATE);
+RETURNS INT AS $$
+BEGIN
+	-- some check
+	
+	
+	INSERT INTO Meeting_Rooms VALUES (_room_num, _room_floor, _room_name, _did);
+	INSERT INTO Updates(manager_id, room, ufloor, udate, new_cap) VALUES (_manager_id, _room_num, _room_floor, _update_date, _room_capacity);
+	RETURN 0;
+END	
+$$ LANGUAGE plpgsql;
 
 
 /* 
@@ -27,7 +37,18 @@ create or replace function add_room
  * input: 
  * output:
  */
-create or replace function change_capacity
+CREATE OR REPLACE FUNCTION change_capacity(_manager_id INTEGER, _room_num INTEGER, _room_floor INTEGER, _new_capacity INTEGER, _update_date DATE)
+RETURNS INT AS $$
+BEGIN
+	-- some check
+	
+	-- update the Updates table
+	UPDATE Updates
+	SET manager_id = _manager_id, udate = _update_date, new_cap = _new_capacity
+	WHERE room = _room_num AND ufloor = _room_floor;
+	RETURN 0;
+END
+$$ LANGUAGE plpgsql;
 
 
 /* 
@@ -125,7 +146,22 @@ $$ language plpgsql;
  * input: 
  * output:
  */
-create or replace function search_room
+CREATE OR REPLACE FUNCTION search_room (_capacity INTEGER, _date DATE, _start_hour TIME, _end_hour TIME)
+RETURNS TABLE(room_number INTEGER, floor_number INTEGER, department_id INTEGER, capacity INTEGER) AS $$
+DECLARE
+	
+BEGIN
+	RETURN QUERY
+	SELECT DISTINCT r.room, r.mfloor, r.did, u.new_cap
+	FROM Meeting_Rooms r 
+	JOIN Updates u 
+	ON r.room = u.room AND r.mfloor = u.ufloor
+	-- LEFT OUTER JOIN Sessions s
+	-- ON r.room = s.room AND r.mfloor = s.sfloor
+	WHERE u.new_cap >= _capacity;
+	-- AND NOT (s.sdate = _date AND s.stime >= _start_hour AND s.stime < _end_hour);
+END
+$$ LANGUAGE plpgsql
 
 
 /* 
@@ -133,16 +169,36 @@ create or replace function search_room
  * input: 
  * output:
  */
-create or replace function book_room
-
+CREATE OR REPLACE FUNCTION book_room (_room_num INTEGER, _room_floor INTEGER, _start_hour TIME, _end_hour TIME, _session_date DATE, _booker_id INTEGER, _manager_id INTEGER)
+RETURNS INT AS $$
+DECLARE
+	current_hour TIME := _start_hour;
+BEGIN
+	WHILE current_hour < _end_hour LOOP
+		INSERT INTO Sessions VALUES (_room_num, _room_floor, current_hour, _session_date, _booker_id, _manager_id);
+		current_hour := current_hour + '1 hour';
+	END LOOP;
+	RETURN 0;
+END
+$$ LANGUAGE plpgsql
 
 /* 
  * Core_3: remove booking of a given room
  * input: 
  * output:
  */
-create or replace function unbook_room
-
+CREATE OR REPLACE FUNCTION unbook_room (_room_num INTEGER, _room_floor INTEGER, _start_hour TIME, _end_hour TIME, _session_date DATE, _booker_id INTEGER)
+RETURNS INT AS $$
+BEGIN
+	DELETE FROM Sessions s
+	WHERE s.room = _room_num
+	AND s.sfloor = _room_floor
+	AND s.sdate = _session_date
+	AND s.stime >= _start_hour
+	AND s.stime < _end_hour;
+	RETURN 0;
+END
+$$ LANGUAGE plpgsql
 
 /* 
  * Core_4: join a booked meeting room

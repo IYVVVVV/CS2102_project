@@ -105,7 +105,7 @@ CREATE TABLE Sessions (
     stime    TIME,
     sdate    DATE,
     booker_id INTEGER NOT NULL,
-    manager_id INTEGER UNIQUE,
+    manager_id INTEGER,
     PRIMARY KEY (room, sfloor, stime, sdate),
     FOREIGN KEY (room, sfloor) REFERENCES Meeting_Rooms (room, mfloor) ON DELETE CASCADE,
     FOREIGN KEY (booker_id) REFERENCES Bookers (eid) ON DELETE CASCADE,
