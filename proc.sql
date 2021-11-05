@@ -3,7 +3,7 @@
  * input: 
  * output:
  */
-CREATE OR REPLACE PROCEDURE add_department (IN _did INT, IN _name VARCHAR(100))
+CREATE OR REPLACE FUNCTION add_department (IN _did INT, IN _name VARCHAR(100))
 AS $$
 declare 
     current_did int;
@@ -23,7 +23,7 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE PROCEDURE remove_department (IN _did INT)
+CREATE OR REPLACE function remove_department (IN _did INT)
 AS $$
 declare 
     current_did int;
@@ -465,7 +465,7 @@ BEGIN
             FROM Sessions s
             WHERE s.booker_id = eid AND s.sdate > sdate
             ORDER BY sdate ASC, stime ASC;
-END
+END;
 $$ LANGUAGE plpgsql;
 
 /* 
@@ -473,7 +473,7 @@ $$ LANGUAGE plpgsql;
  * input: sdate, eid
  * output: floor_number, room_number, meeting_date, start_time, start_hour
  */
-CREATE OR REPLACE FUNCTION ViewFutureMeeting (IN sdate DATE, IN id INT) 
+CREATE OR REPLACE FUNCTION view_future_meeting (IN sdate DATE, IN id INT) 
 RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartHour Time) AS $$
 DECLARE
     current_eid INT;
@@ -485,9 +485,10 @@ BEGIN
         RETURN QUERY
             SELECT sfloor AS FloorNumber, room AS RoomNumber, sdate AS MeetingDate, stime AS StartHour
             FROM Sessions s
-            WHERE s.booker_id = id AND s.sdate > sdate AND s.manager_id IS NOT NULL
+            WHERE s.booker_id = id AND s.sdate >= sdate AND s.manager_id IS NOT NULL
             ORDER BY sdate ASC, stime ASC;
-END
+    END IF;
+END;
 $$ LANGUAGE plpgsql;
 
 
