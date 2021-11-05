@@ -27,7 +27,7 @@ sessions = []  # (room, floor, time, date) tuples
 def get_random_depart_name():
     first_char = choice(UPPER_CHARS)
     rest_chars = ''.join([choice(LOWER_CHARS) for i in range(choice(range(3, 9)))])
-    return first_char + rest_chars
+    return 'Department_' + first_char + rest_chars
 
 def get_random_employee_name_part():
     first_char = choice(UPPER_CHARS)
@@ -70,6 +70,7 @@ def create_employees(datafile):
     # eid: 1 - 30
     # Juniors: 1 -10
     # Bookers : 11 - 30; Seniors: 11 - 20; Managers: 21 - 30
+    # each department has a manager
     # each of employee has 1-3 contact numbers
     # first three person in J, S, M is resigned (1-3, 11-13, 21-23)
     cmd_e = cmd_j = cmd_b = cmd_s = cmd_m = cmd_c = ''
@@ -88,8 +89,15 @@ def create_employees(datafile):
         else:
             current_employee_ids.append(eid)
 
-        cmd_e += f'insert into Employees(ename, email, resigned_date, did) '\
-                + f'values (\'{ename}\', \'{email}\', {resigned_date_str}, {did});\n'
+        if 21 <= eid <= 30:
+            did = eid % 10
+            did = 10 if did == 0 else did
+            cmd_e += f'insert into Employees(ename, email, resigned_date, did) '\
+                    + f'values (\'{ename}\', \'{email}\', {resigned_date_str}, {did});\n'
+        else:
+            cmd_e += f'insert into Employees(ename, email, resigned_date, did) ' \
+                     + f'values (\'{ename}\', \'{email}\', {resigned_date_str}, {did});\n'
+
         if 1 <= eid <= 10:
             cmd_j += f'insert into Juniors(eid) values ({eid});\n'
         else:
@@ -163,7 +171,6 @@ def create_health_declarations(datafile):
     datafile.write('\n')
         
 def create_departments(datafile):
-    # dummy code here
     datafile.write('--Departments\n')
     for did in range(1, 11):
         department_ids.append(did)
@@ -172,17 +179,85 @@ def create_departments(datafile):
         datafile.write(cmd)
     datafile.write('\n')
 
+
+def get_random_room_name():
+    first_char = choice(UPPER_CHARS)
+    rest_chars = ''.join([choice(LOWER_CHARS) for i in range(choice(range(3, 9)))])
+    return 'Room_' + first_char + rest_chars
+
 def create_meeting_rooms(datafile):
-    pass
+    # each department has 1 meeting room, did=room=floor
+    datafile.write('--Meeting_Rooms\n')
+    for did in range(1, 11):
+        room = mfloor = did
+        meeting_rooms.append((room, mfloor))
+        rname = get_random_room_name()
+        cmd = f'insert into Meeting_Rooms(room, mfloor, rname, did) values ({room}, {mfloor}, \'{rname}\', {did});\n'
+        datafile.write(cmd)
+    datafile.write('\n')
+
+def get_random_room_cap_date(did):
+    # each room allows 1 - 2 people
+    cap = 2 if did % 2 == 0 else 1
+    currdate = datetime.datetime.now()  # '2021-11-04'
+    prevdate = currdate - datetime.timedelta(randint(7, 14))
+    prevdate_str = prevdate.strftime('%Y-%m-%d')  # eg. '2021-10-31'
+    return cap, prevdate, prevdate_str
 
 def create_updates(datafile):
-    pass
+    # every manager has update twice for the room from the same department
+    # cap1 = 1/2; cap2 = 2 * cap1
+    # all date will be earlier than 7 days ago to prevent resignation
+    datafile.write('--Updates\n')
+    for manager_id in manager_ids:
+        did = manager_id % 10
+        did = 10 if did == 0 else did
+        room = ufloor = did
+        cap_1, predate_1, predate_str_1 = get_random_room_cap_date(did)
+        cmd = f'insert into Updates(manager_id, room, ufloor, udate, new_cap) ' \
+            + f'values ({manager_id}, {room}, {ufloor}, \'{predate_str_1}\', {cap_1});\n'
+        cap_2 = cap_1 * 2
+        predate_2 = predate_1 + datetime.timedelta(1)
+        predate_str_2 = predate_2.strftime('%Y-%m-%d')
+        cmd += f'insert into Updates(manager_id, room, ufloor, udate, new_cap) ' \
+              + f'values ({manager_id}, {room}, {ufloor}, \'{predate_str_2}\', {cap_2});\n'
+        datafile.write(cmd)
+    datafile.write('\n')
 
 def create_sessions(datafile):
-    pass
+    # we create 2 meetings for department 9, 10 on 1 month later by employee 19, 20
+    # meeting_1: booker-19, room-9, floor-9, date-1 month later, time-12:00-17:00, manager-29, join-19, 9
+    # meeting_2: booker-20, room-10, floor-10, date-1 month later, time-13:00-18:00, manager-NULL, join-20, 4,5,6
+    datafile.write('--Sessions\n')
+    currdate = datetime.datetime.now()
+    prevdate = currdate + datetime.timedelta(30)
+    prevdate = prevdate.strftime('%Y-%m-%d')
+    cmd = ''
+    for i in range(12, 18):
+        cmd += f'insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) ' \
+            + f'values (9, 9, \'{i}:00\', \'{prevdate}\', 19, 29);\n'
+    for j in range(13, 19):
+        cmd += f'insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) ' \
+               + f'values (10, 10, \'{j}:00\', \'{prevdate}\', 20, NULL);\n'
+    datafile.write(cmd)
+    datafile.write('\n')
 
 def create_joins(datafile):
-    pass
+    datafile.write('--Joins\n')
+    currdate = datetime.datetime.now()
+    prevdate = currdate + datetime.timedelta(30)
+    prevdate = prevdate.strftime('%Y-%m-%d')
+    cmd = ''
+    for eid in [19, 9]:
+        for i in range(12, 18):
+            cmd += f'insert into Joins(eid, room, jfloor, jtime, jdate) ' \
+                   + f'values ({eid}, 9, 9, \'{i}:00\', \'{prevdate}\');\n'
+    for eid in [20, 4, 5, 6]:
+        for i in range(13, 19):
+            cmd += f'insert into Joins(eid, room, jfloor, jtime, jdate) ' \
+                   + f'values ({eid}, 10, 10, \'{i}:00\', \'{prevdate}\');\n'
+    datafile.write(cmd)
+    datafile.write('\n')
 
 
 if __name__ == "__main__":
