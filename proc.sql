@@ -3,7 +3,10 @@
  * input: 
  * output:
  */
-create or replace function add_department
+CREATE OR REPLACE PROCEDURE add_department (IN did INT, IN ame VARCHAR(100))
+AS $$
+	INSERT INTO Departments VALUES (did,ame);
+$$ LANGUAGE sql;
 
 
 /* 
@@ -11,8 +14,16 @@ create or replace function add_department
  * input: 
  * output:
  */
-create or replace function remove_department
+CREATE OR REPLACE PROCEDURE remove_department (IN did INT)
+AS $$
+	FOR emps IN SELECT eid FROM Employees WHERE Employees.did=did LOOP
+		IF SELECT IsResigned(emps) THEN
+			RAISE 'Some employees in this department % is not removed yet', did;
+		END IF；
+	END LOOP
 
+DELETE FROM Departments WHERE Departments.did=did;
+$$ LANGUAGE sql;
 
 /* 
  * Basic_3: add a new meeting room
@@ -273,7 +284,47 @@ $$ LANGUAGE plpgsql;
  * output:
  */
 create or replace function approve_meeting
+CREATE OR REPLACE FUNCTION IsResigned(IN eid INT)
+RETURNS BOOLEAN AS $$
+DECLARE
+    rdate DATE;
+BEGIN 
+    SELECT resign_date INTO rdate FROM Employees WHERE Employees.eid=eid;
+	RETURN rdate NOT NULL AND rdate<=now()::date;
+END
+$$ LANGUAGE plpgsql;
 
+
+CREATE OR REPLACE PROCEDURE approve_meeting (IN floor_num INT, room_num INT, IN date DATE, IN start_hour TIME, IN end_hour TIME, IN booker_eid INT, IN approve_eid INT) 
+AS $$
+DECLARE 
+	mng_did INT; expect_did INT; rdate DATE;
+BEGIN
+	SELECT did INTO mng_did FROM Managers WHERE eid=approve_eid;
+	IF mng_did IS NULL THEN
+		RAISE 'The given eid % is not a manager!', approve_eid
+		USING HINT = 'Please check the manager eid';
+	END IF;
+	
+	IF SELECT IsResigned(approve_eid) THEN 
+        RAISE 'Manager % is resigned!', approve_eid
+		USING HINT = 'Please check the manager eid';
+    END　IF;
+    
+    SELECT did INTO expect_did FROM Meeting_Rooms WHERE mfloor=floor_num, Room=room_num;
+	IF expect_did IS NULL THEN
+		RAISE 'The given room % in % floor does not exist!', room_num, floor_num;
+		USING HINT = 'Please Check the room and floor';
+	END IF;
+
+    IF mng_did=expect_eid THEN
+        INSERT INTO Sessions VALUES(room_num, floor_num, start_hour, booker_eid, approve_eid)
+	ELSE 
+		RAISE 'The given manager % is not in charge of this room', approve_eid
+		USING HINT = 'Please check the manager and the room';
+    END IF；
+END;
+$$ LANGUAGE plpgsql;
 
 /* 
  * Health_1: used for daily declaration of temperature
@@ -337,4 +388,20 @@ $$ LANGUAGE sql;
  * input: 
  * output:
  */
-create or replace function view_manager_report
+CREATE OR REPLACE FUNCTION view_manager_report (IN start_date DATE, IN eid INT)
+RETURNS TABLE(Floor INT, Room INT, Date DATE, Start_hour TIME, EmpID INT) AS $$
+DECLARE
+		mng_did INT;
+BEGIN
+		IF eid IN (SELECT eid FORM Managers) THEN
+		    SELECT did INTO mng_did FROM Managers WHERE Managers.eid=eid;
+			 RETURNS QUERY
+			   	SELECT sfloor, room, sdate, stime, booker_id
+			    FROM Sessions NATURAL JOIN Meeting_Rooms
+			    WHERE Meeting_Rooms.did= mng_did AND sdate >= start_date AND manager_id=eid
+                ORDERED BY sdate, stime;
+		ELSE
+			RETURN;
+		END IF
+END;
+$$ LANGUAGE plpgsql;
