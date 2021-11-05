@@ -5,7 +5,8 @@
  */
 CREATE OR REPLACE PROCEDURE add_department (IN _did INT, IN _name VARCHAR(100))
 AS $$
-declare current_did int;
+declare 
+    current_did int;
 begin
     select did into current_did from Departments where did = _did;
     if current_did is not NULL then
@@ -24,7 +25,8 @@ $$ LANGUAGE plpgsql;
  */
 CREATE OR REPLACE PROCEDURE remove_department (IN _did INT)
 AS $$
-declare current_did int;
+declare 
+    current_did int;
 begin
     select did into current_did from Departments where did = _did;
     if current_did is NULL then
@@ -142,28 +144,31 @@ declare
 begin
     num_records := 0;
     select eid from Employees where eid = _eid into current_eid;
+    
     if current_eid is null then
         raise exception 'Remove failed. No employee with the given eid.';
-    else
-        -- reject the remove if the employee has already be removed
-        select resigned_date into old_resigned_date from Employees where eid = _eid;
-        if old_resigned_date is not null then
-            raise exception 'Remove failed. The employee has been removed before.';
-        end if;
-        
-        -- reject the remove if the employee joins an approved session later then the given date
-        select count(*) into num_records
-        from Joins as j, Sessions as s
-        where j.room = s.room and j.jfloor = s.sfloor and j.jtime = s.stime and j.jdate = s.sdate
-            and j.eid = _eid and s.manager_id is not null
-            and j.jdate > _resigned_date;
-        if num_records <> 0 then
-            raise exception 'Remove failed. The employee joins some approved meetings later then the given date.';
-        end if;
-        
-        update Employees set resigned_date = _resigned_date where eid = _eid;
-            return 0;
     end if;
+
+    select resigned_date into old_resigned_date from Employees where eid = _eid;
+    if old_resigned_date is not null then
+        raise exception 'Remove failed. The employee has been removed before.';
+    end if;
+        
+    select count(*) into num_records
+    from Joins as j, Sessions as s
+    where j.room = s.room and j.jfloor = s.sfloor and j.jtime = s.stime and j.jdate = s.sdate
+        and j.eid = _eid and s.manager_id is not null
+        and j.jdate > _resigned_date;
+    if num_records <> 0 then
+        raise exception 'Remove failed. The employee joins some approved meetings later then the given date.';
+    end if;
+        
+    update Employees set resigned_date = _resigned_date where eid = _eid;
+
+    -- remove his booking session ans all joins
+    
+    return 0;
+
 end;
 $$ language plpgsql;
 
