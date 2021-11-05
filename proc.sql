@@ -204,45 +204,67 @@ $$ LANGUAGE plpgsql
  * input: floor_number, room_number, meeting_date, start_hour, end_hour, eid
  * output: null cause a procedure
  */
-CREATE OR REPLACE PROCEDURE JoinMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour INT, IN end_hour INT, IN eid INT) AS $$
+CREATE OR REPLACE PROCEDURE JoinMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour INT, IN end_hour INT, IN id INT) AS $$
 DECLARE 
     temp INT := start_hour;
+    meeting_room INT;
+    resigned INT;
+    fever_id INT;
+    joined_id INT; 
 BEGIN
     WHILE temp > end_hour LOOP
-        IF EXISTS (SELECT room, sfloor, stime, sdate
-                FROM Sessions
-                WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL)
-            AND NOT EXISTS (SELECT h.eid, fever
-                        FROM Health_declarations h
-                        WHERE h.eid = eid and fever = true) THEN
-            INSERT INTO Joins VALUES (eid, meeting_room, floor_number, cast(convert（varchar(8),temp）as time), meeting_date);
+        SELECT room INTO meeting_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL;
+        IF meeting_room IS NULL THEN
+            raise exception 'Join failed. The meeting has been approved already.';
+        ELSE
+            SELECT resign_date INTO resigned FROM Employees WHERE eid = id;
+            IF resigned IS NOT NULL AND meeting_date > resigned THEN
+                raise exception 'Join failed. The employee has resigned.';
+            END IF;
+
+            SELECT h.eid INTO fever_id FROM Health_declarations h WHERE h.eid = id and fever = true;
+            IF fever_id IS NOT NULL THEN
+                raise exception 'Join failed. The employee has a fever.';
+            END IF;
+            
+            SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = cast(convert（varchar(8),temp）as time) AND jdate = meeting_date;
+            IF joined_id IS NOT NULL THEN
+                raise exception 'Join failed. The employee has already joined the meeting';
+            END IF;
+
+            INSERT INTO Joins VALUES (id, room_number, floor_number, cast(convert（varchar(8),temp）as time), meeting_date);
         END IF;
         temp := temp + 10000;
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;
-
-
 /* 
  * Core_5: leave a booked meeting room
  * input: floor_number, room_number, meeting_date, start_hour, end_hour, eid
  * output: null cause a procedure
  */
-CREATE OR REPLACE PROCEDURE LeaveMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour INT, IN end_hour INT, IN eid INT) AS $$
+CREATE OR REPLACE PROCEDURE LeaveMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour INT, IN end_hour INT, IN id INT) AS $$
 DECLARE 
     temp INT := start_hour;
+    meeting_room INT;
+    joined_id INT; 
 BEGIN
     WHILE temp > end_hour LOOP
-        IF EXISTS (SELECT room, sfloor, stime, sdate
-                FROM Sessions
-                WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL) THEN
-            DELETE FROM Joins WHERE Joins.eid = eid AND Joins.room = room_number AND Joins.jfloor = floor_number AND Joins.jtime = cast(convert（varchar(8),temp）as time) AND Joins.jdate = meeting_date;
+        SELECT room INTO meeting_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL;
+        IF meeting_room IS NULL THEN
+            raise exception 'Leave failed. The meeting has been approved already.';
+        ELSE
+            SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = cast(convert（varchar(8),temp）as time) AND jdate = meeting_date;
+            IF joined_id IS NULL THEN
+                raise exception 'Leave failed. The employee did not joind the session or has left.'
+            END IF;
+
+            DELETE FROM Joins WHERE eid = id AND room = room_number AND jfloor = floor_number AND jtime = cast(convert（varchar(8),temp）as time) AND jdate = meeting_date;
         END IF;
         temp := temp + 10000;
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;
-
 
 
 /* 
