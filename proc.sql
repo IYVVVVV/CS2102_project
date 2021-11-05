@@ -156,10 +156,9 @@ BEGIN
 	FROM Meeting_Rooms r 
 	JOIN Updates u 
 	ON r.room = u.room AND r.mfloor = u.ufloor
-	-- LEFT OUTER JOIN Sessions s
-	-- ON r.room = s.room AND r.mfloor = s.sfloor
-	WHERE u.new_cap >= _capacity;
-	-- AND NOT (s.sdate = _date AND s.stime >= _start_hour AND s.stime < _end_hour);
+	, Sessions s
+	WHERE u.new_cap >= _capacity
+	AND NOT (s.room = r.room AND s.sfloor = r.mfloor AND s.sdate = _date AND s.stime >= _start_hour AND s.stime < _end_hour);
 END
 $$ LANGUAGE plpgsql
 
