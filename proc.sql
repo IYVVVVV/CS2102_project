@@ -20,7 +20,7 @@ AS $$
 		IF SELECT IsResigned(emps) THEN
 			RAISE 'Some employees in this department % is not removed yet', did;
 		END IF；
-	END LOOP
+	END LOOP;
 
 DELETE FROM Departments WHERE Departments.did=did;
 $$ LANGUAGE sql;
@@ -304,7 +304,7 @@ DECLARE
 BEGIN 
     SELECT resign_date INTO rdate FROM Employees WHERE Employees.eid=eid;
 	RETURN rdate NOT NULL AND rdate<=now()::date;
-END
+END;
 $$ LANGUAGE plpgsql;
 
 
@@ -354,7 +354,7 @@ BEGIN
 		WHEN temp <37.5 THEN FALSE
 	END;
 	INSERT INTO Health_declarations VALUES (eid, ddate, temperature, fever);
-END
+END;
 $$ LANGUAGE plpgsql;
 
 
