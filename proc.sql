@@ -370,6 +370,14 @@ AS $$
 DECLARE 
 	fever BOOLEAN;
 BEGIN
+	IF eid NOT IN (SELECT eid FROM Employees)  THEN
+		RAISE 'The given eid % does not exist!', eid
+		USING HINT = 'Please check the eid';
+	END IF;
+	IF SELECT IsResigned(eid) THEN
+		RAISE 'Empoloyee % is resigned!', eid
+		USING HINT = 'Please check the eid';
+	END IF;
 	fever = CASE
 		WHEN temp>=37.5 THEN TRUE
 		WHEN temp <37.5 THEN FALSE
