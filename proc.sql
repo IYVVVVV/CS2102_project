@@ -231,9 +231,9 @@ $$ LANGUAGE plpgsql
  * input: floor_number, room_number, meeting_date, start_hour, end_hour, eid
  * output: null cause a procedure
  */
-CREATE OR REPLACE PROCEDURE JoinMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour INT, IN end_hour INT, IN id INT) AS $$
+CREATE OR REPLACE PROCEDURE JoinMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour TIME, IN end_hour TIME, IN id INT) AS $$
 DECLARE 
-    temp INT := start_hour;
+    temp TIME := start_hour;
     current_eid INT;
     meeting_room INT;
     resigned INT;
@@ -259,14 +259,14 @@ BEGIN
             raise exception 'Join failed. The employee has a fever.';
         END IF;
             
-        SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = cast(convert（varchar(8),temp）as time) AND jdate = meeting_date;
+        SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
         IF joined_id IS NOT NULL THEN
             raise exception 'Join failed. The employee has already joined the meeting';
         END IF;
 
         WHILE temp > end_hour LOOP
-            INSERT INTO Joins VALUES (id, room_number, floor_number, cast(convert（varchar(8),temp）as time), meeting_date);
-            temp := temp + 10000;
+            INSERT INTO Joins VALUES (id, room_number, floor_number, temp, meeting_date);
+            temp := temp + '1 hour';
         END LOOP;
     END IF;
 END;
@@ -278,9 +278,9 @@ $$ LANGUAGE plpgsql;
  * input: floor_number, room_number, meeting_date, start_hour, end_hour, eid
  * output: null cause a procedure
  */
-CREATE OR REPLACE PROCEDURE LeaveMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour INT, IN end_hour INT, IN id INT) AS $$
+CREATE OR REPLACE PROCEDURE LeaveMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour TIME, IN end_hour TIME, IN id INT) AS $$
 DECLARE 
-    temp INT := start_hour;
+    temp TIME := start_hour;
     current_eid INT;
     meeting_room INT;
     joined_id INT; 
@@ -294,14 +294,14 @@ BEGIN
             raise exception 'Leave failed. The meeting has been approved already.';
         END IF;
             
-        SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = cast(convert（varchar(8),temp）as time) AND jdate = meeting_date;
+        SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
         IF joined_id IS NULL THEN
             raise exception 'Leave failed. The employee did not joind the session or has left.'
         END IF;
 
         WHILE temp > end_hour LOOP
-            DELETE FROM Joins WHERE eid = id AND room = room_number AND jfloor = floor_number AND jtime = cast(convert（varchar(8),temp）as time) AND jdate = meeting_date;
-            temp := temp + 10000;
+            DELETE FROM Joins WHERE eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
+            temp := temp + '1 hour';
         END LOOP;
     END IF;
 END;
