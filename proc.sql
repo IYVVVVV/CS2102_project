@@ -161,6 +161,7 @@ BEGIN
                         FROM Health_declarations h
                         WHERE h.eid = eid and fever = true) THEN
             INSERT INTO Joins VALUES (eid, meeting_room, floor_number, cast(convert（varchar(8),temp）as time), meeting_date);
+        END IF;
         temp := temp + 10000;
     END LOOP;
 END;
@@ -181,6 +182,7 @@ BEGIN
                 FROM Sessions
                 WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL) THEN
             DELETE FROM Joins WHERE Joins.eid = eid AND Joins.room = room_number AND Joins.jfloor = floor_number AND Joins.jtime = cast(convert（varchar(8),temp）as time) AND Joins.jdate = meeting_date;
+        END IF;
         temp := temp + 10000;
     END LOOP;
 END;
