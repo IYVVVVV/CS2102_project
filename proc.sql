@@ -1,10 +1,21 @@
+CREATE OR REPLACE FUNCTION is_resigned(IN _eid INT)
+RETURNS BOOLEAN AS $$
+DECLARE
+    rdate DATE;
+BEGIN 
+    SELECT resigned_date INTO rdate FROM Employees WHERE Employees.eid=_eid;
+    RETURN rdate is NOT NULL AND rdate<=now()::date;
+END;
+$$ LANGUAGE plpgsql;
+
+
 /* 
  * Basic_1: add a new department
  * input: 
  * output:
  */
 CREATE OR REPLACE FUNCTION add_department (IN _did INT, IN _name VARCHAR(100))
-AS $$
+RETURNS INT AS $$
 declare 
     current_did int;
 begin
@@ -14,6 +25,7 @@ begin
     end if;
 
 	INSERT INTO Departments VALUES (_did, _name);
+    return 0;
 end;
 $$ LANGUAGE plpgsql;
 
@@ -24,25 +36,27 @@ $$ LANGUAGE plpgsql;
  * output:
  */
 CREATE OR REPLACE function remove_department (IN _did INT)
-AS $$
+RETURNS INT AS $$
 declare 
     current_did int;
+    emps record;
 begin
     select did into current_did from Departments where did = _did;
     if current_did is NULL then
         raise exception 'Remove failed. There is no department with such id.';
     end if;
 
-	FOR emps IN SELECT eid FROM Employees WHERE Employees.did=_did LOOP
-		IF SELECT IsResigned(emps) THEN
+	FOR emps IN SELECT * FROM Employees WHERE Employees.did=_did LOOP
+		IF is_resigned(emps.eid) THEN
 			RAISE 'Remove failed. Some employees in this department % is not removed yet', _did;
-		END IF；
+		END IF;
 	END LOOP;
-    IF (SELECT * FROM Meeting_Rooms WHERE Meeting_Rooms.did=_did ) NOT NULL THEN
+    IF (SELECT count(*) FROM Meeting_Rooms WHERE Meeting_Rooms.did=_did ) <> 0 THEN
         RAISE 'Remove failed. Delete all meeting rooms inside department % before deleting the department!', _did;
     END IF;
 
     DELETE FROM Departments WHERE Departments.did = _did;
+    return 0;
 end;
 $$ LANGUAGE plpgsql;
 
@@ -231,7 +245,7 @@ BEGIN
 	, Sessions s
 	WHERE u.new_cap >= _capacity
 	AND NOT (s.room = r.room AND s.sfloor = r.mfloor AND s.sdate = _date AND s.stime >= _start_hour AND s.stime < _end_hour);
-END
+END;
 $$ LANGUAGE plpgsql
 
 
@@ -250,7 +264,7 @@ BEGIN
 		current_hour := current_hour + '1 hour';
 	END LOOP;
 	RETURN 0;
-END
+END;
 $$ LANGUAGE plpgsql
 
 /* 
@@ -268,7 +282,7 @@ BEGIN
 	AND s.stime >= _start_hour
 	AND s.stime < _end_hour;
 	RETURN 0;
-END
+END;
 $$ LANGUAGE plpgsql
 
 /* 
@@ -358,17 +372,6 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE FUNCTION IsResigned(IN eid INT)
-RETURNS BOOLEAN AS $$
-DECLARE
-    rdate DATE;
-BEGIN 
-    SELECT resign_date INTO rdate FROM Employees WHERE Employees.eid=eid;
-	RETURN rdate NOT NULL AND rdate<=now()::date;
-END;
-$$ LANGUAGE plpgsql;
-
-
 CREATE OR REPLACE PROCEDURE approve_meeting (IN floor_num INT, room_num INT, IN date DATE, IN start_hour TIME, IN end_hour TIME, IN booker_eid INT, IN approve_eid INT) 
 AS $$
 DECLARE 
@@ -380,7 +383,7 @@ BEGIN
 		USING HINT = 'Please check the manager eid';
 	END IF;
 	
-	IF SELECT IsResigned(approve_eid) THEN 
+	IF SELECT is_resigned(approve_eid) THEN 
         RAISE 'Manager % is resigned!', approve_eid
 		USING HINT = 'Please check the manager eid';
     END　IF;
@@ -406,7 +409,7 @@ $$ LANGUAGE plpgsql;
  * output:
  */
 CREATE OR REPLACE FUNCTION declare_health (IN eid INT, IN ddate DATE, IN temp FLOAT(2))
-AS $$
+RETURNS INT AS $$
 DECLARE 
 	fever BOOLEAN;
 BEGIN
@@ -414,7 +417,7 @@ BEGIN
 		RAISE 'The given eid % does not exist!', eid
 		USING HINT = 'Please check the eid';
 	END IF;
-	IF SELECT IsResigned(eid) THEN
+	IF is_resigned(eid) THEN
 		RAISE 'Empoloyee % is resigned!', eid
 		USING HINT = 'Please check the eid';
 	END IF;
@@ -423,6 +426,7 @@ BEGIN
 		WHEN temp <37.5 THEN FALSE
 	END;
 	INSERT INTO Health_declarations VALUES (eid, ddate, temperature, fever);
+    return 0;
 END;
 $$ LANGUAGE plpgsql;
 
