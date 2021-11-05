@@ -38,6 +38,9 @@ begin
 			RAISE 'Remove failed. Some employees in this department % is not removed yet', _did;
 		END IF；
 	END LOOP;
+    IF (SELECT * FROM Meeting_Rooms WHERE Meeting_Rooms.did=_did ) NOT NULL THEN
+        RAISE 'Remove failed. Delete all meeting rooms inside department % before deleting the department!', _did;
+    END IF;
 
     DELETE FROM Departments WHERE Departments.did = _did;
 end;
