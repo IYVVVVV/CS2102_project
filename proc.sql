@@ -3,7 +3,19 @@
  * input: 
  * output:
  */
-create or replace function add_department
+CREATE OR REPLACE PROCEDURE add_department (IN _did INT, IN _name VARCHAR(100))
+AS $$
+declare 
+    current_did int;
+begin
+    select did into current_did from Departments where did = _did;
+    if current_did is not NULL then
+        raise exception 'Add failed. There is already a department with such id.';
+    end if;
+
+	INSERT INTO Departments VALUES (_did, _name);
+end;
+$$ LANGUAGE plpgsql;
 
 
 /* 
@@ -11,8 +23,25 @@ create or replace function add_department
  * input: 
  * output:
  */
-create or replace function remove_department
+CREATE OR REPLACE PROCEDURE remove_department (IN _did INT)
+AS $$
+declare 
+    current_did int;
+begin
+    select did into current_did from Departments where did = _did;
+    if current_did is NULL then
+        raise exception 'Remove failed. There is no department with such id.';
+    end if;
 
+	FOR emps IN SELECT eid FROM Employees WHERE Employees.did=_did LOOP
+		IF SELECT IsResigned(emps) THEN
+			RAISE 'Some employees in this department % is not removed yet', _did;
+		END IF；
+	END LOOP;
+
+    DELETE FROM Departments WHERE Departments.did = _did;
+end;
+$$ LANGUAGE plpgsql;
 
 /* 
  * Basic_3: add a new meeting room
@@ -143,28 +172,31 @@ declare
 begin
     num_records := 0;
     select eid from Employees where eid = _eid into current_eid;
+    
     if current_eid is null then
         raise exception 'Remove failed. No employee with the given eid.';
-    else
-        -- reject the remove if the employee has already be removed
-        select resigned_date into old_resigned_date from Employees where eid = _eid;
-        if old_resigned_date is not null then
-            raise exception 'Remove failed. The employee has been removed before.';
-        end if;
-        
-        -- reject the remove if the employee joins an approved session later then the given date
-        select count(*) into num_records
-        from Joins as j, Sessions as s
-        where j.room = s.room and j.jfloor = s.sfloor and j.jtime = s.stime and j.jdate = s.sdate
-            and j.eid = _eid and s.manager_id is not null
-            and j.jdate > _resigned_date;
-        if num_records <> 0 then
-            raise exception 'Remove failed. The employee joins some approved meetings later then the given date.';
-        end if;
-        
-        update Employees set resigned_date = _resigned_date where eid = _eid;
-            return 0;
     end if;
+
+    select resigned_date into old_resigned_date from Employees where eid = _eid;
+    if old_resigned_date is not null then
+        raise exception 'Remove failed. The employee has been removed before.';
+    end if;
+        
+    select count(*) into num_records
+    from Joins as j, Sessions as s
+    where j.room = s.room and j.jfloor = s.sfloor and j.jtime = s.stime and j.jdate = s.sdate
+        and j.eid = _eid and s.manager_id is not null
+        and j.jdate > _resigned_date;
+    if num_records <> 0 then
+        raise exception 'Remove failed. The employee joins some approved meetings later then the given date.';
+    end if;
+        
+    update Employees set resigned_date = _resigned_date where eid = _eid;
+
+    -- remove his booking session ans all joins
+    
+    return 0;
+
 end;
 $$ language plpgsql;
 
@@ -232,65 +264,79 @@ $$ LANGUAGE plpgsql
  * input: floor_number, room_number, meeting_date, start_hour, end_hour, eid
  * output: null cause a procedure
  */
-CREATE OR REPLACE PROCEDURE JoinMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour INT, IN end_hour INT, IN id INT) AS $$
+CREATE OR REPLACE PROCEDURE JoinMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour TIME, IN end_hour TIME, IN id INT) AS $$
 DECLARE 
-    temp INT := start_hour;
+    temp TIME := start_hour;
+    current_eid INT;
     meeting_room INT;
     resigned INT;
     fever_id INT;
     joined_id INT; 
 BEGIN
-    WHILE temp > end_hour LOOP
+    SELECT eid INTO current_eid FROM Employees WHERE eid = id;
+    IF current_eid IS NULL THEN
+        raise exception 'Join Failed. There is no employee with such id.';
+    ELSE
         SELECT room INTO meeting_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL;
         IF meeting_room IS NULL THEN
             raise exception 'Join failed. The meeting has been approved already.';
-        ELSE
-            SELECT resign_date INTO resigned FROM Employees WHERE eid = id;
-            IF resigned IS NOT NULL AND meeting_date > resigned THEN
-                raise exception 'Join failed. The employee has resigned.';
-            END IF;
-
-            SELECT h.eid INTO fever_id FROM Health_declarations h WHERE h.eid = id and fever = true;
-            IF fever_id IS NOT NULL THEN
-                raise exception 'Join failed. The employee has a fever.';
-            END IF;
-            
-            SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = cast(convert（varchar(8),temp）as time) AND jdate = meeting_date;
-            IF joined_id IS NOT NULL THEN
-                raise exception 'Join failed. The employee has already joined the meeting';
-            END IF;
-
-            INSERT INTO Joins VALUES (id, room_number, floor_number, cast(convert（varchar(8),temp）as time), meeting_date);
         END IF;
-        temp := temp + 10000;
-    END LOOP;
+
+        SELECT resign_date INTO resigned FROM Employees WHERE eid = id;
+        IF resigned IS NOT NULL AND meeting_date > resigned THEN
+            raise exception 'Join failed. The employee has resigned.';
+        END IF;
+
+        SELECT h.eid INTO fever_id FROM Health_declarations h WHERE h.eid = id and fever = true;
+        IF fever_id IS NOT NULL THEN
+            raise exception 'Join failed. The employee has a fever.';
+        END IF;
+            
+        SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
+        IF joined_id IS NOT NULL THEN
+            raise exception 'Join failed. The employee has already joined the meeting';
+        END IF;
+
+        WHILE temp > end_hour LOOP
+            INSERT INTO Joins VALUES (id, room_number, floor_number, temp, meeting_date);
+            temp := temp + '1 hour';
+        END LOOP;
+    END IF;
 END;
 $$ LANGUAGE plpgsql;
+
+
 /* 
  * Core_5: leave a booked meeting room
  * input: floor_number, room_number, meeting_date, start_hour, end_hour, eid
  * output: null cause a procedure
  */
-CREATE OR REPLACE PROCEDURE LeaveMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour INT, IN end_hour INT, IN id INT) AS $$
+CREATE OR REPLACE PROCEDURE LeaveMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour TIME, IN end_hour TIME, IN id INT) AS $$
 DECLARE 
-    temp INT := start_hour;
+    temp TIME := start_hour;
+    current_eid INT;
     meeting_room INT;
     joined_id INT; 
 BEGIN
-    WHILE temp > end_hour LOOP
+    SELECT eid INTO current_eid FROM Employees WHERE eid = id;
+    IF current_eid IS NULL THEN
+        raise exception 'Leave Failed. There is no employee with such id.';
+    ELSE
         SELECT room INTO meeting_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL;
         IF meeting_room IS NULL THEN
             raise exception 'Leave failed. The meeting has been approved already.';
-        ELSE
-            SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = cast(convert（varchar(8),temp）as time) AND jdate = meeting_date;
-            IF joined_id IS NULL THEN
-                raise exception 'Leave failed. The employee did not joind the session or has left.'
-            END IF;
-
-            DELETE FROM Joins WHERE eid = id AND room = room_number AND jfloor = floor_number AND jtime = cast(convert（varchar(8),temp）as time) AND jdate = meeting_date;
         END IF;
-        temp := temp + 10000;
-    END LOOP;
+            
+        SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
+        IF joined_id IS NULL THEN
+            raise exception 'Leave failed. The employee did not joind the session or has left.'
+        END IF;
+
+        WHILE temp > end_hour LOOP
+            DELETE FROM Joins WHERE eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
+            temp := temp + '1 hour';
+        END LOOP;
+    END IF;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -300,15 +346,73 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-create or replace function approve_meeting
+CREATE OR REPLACE FUNCTION IsResigned(IN eid INT)
+RETURNS BOOLEAN AS $$
+DECLARE
+    rdate DATE;
+BEGIN 
+    SELECT resign_date INTO rdate FROM Employees WHERE Employees.eid=eid;
+	RETURN rdate NOT NULL AND rdate<=now()::date;
+END;
+$$ LANGUAGE plpgsql;
 
+
+CREATE OR REPLACE PROCEDURE approve_meeting (IN floor_num INT, room_num INT, IN date DATE, IN start_hour TIME, IN end_hour TIME, IN booker_eid INT, IN approve_eid INT) 
+AS $$
+DECLARE 
+	mng_did INT; expect_did INT; rdate DATE;
+BEGIN
+	SELECT did INTO mng_did FROM Managers WHERE eid=approve_eid;
+	IF mng_did IS NULL THEN
+		RAISE 'The given eid % is not a manager!', approve_eid
+		USING HINT = 'Please check the manager eid';
+	END IF;
+	
+	IF SELECT IsResigned(approve_eid) THEN 
+        RAISE 'Manager % is resigned!', approve_eid
+		USING HINT = 'Please check the manager eid';
+    END　IF;
+    
+    SELECT did INTO expect_did FROM Meeting_Rooms WHERE mfloor=floor_num, Room=room_num;
+	IF expect_did IS NULL THEN
+		RAISE 'The given room % in % floor does not exist!', room_num, floor_num;
+		USING HINT = 'Please Check the room and floor';
+	END IF;
+
+    IF mng_did=expect_eid THEN
+        INSERT INTO Sessions VALUES(room_num, floor_num, start_hour, booker_eid, approve_eid)
+	ELSE 
+		RAISE 'The given manager % is not in charge of this room', approve_eid
+		USING HINT = 'Please check the manager and the room';
+    END IF；
+END;
+$$ LANGUAGE plpgsql;
 
 /* 
  * Health_1: used for daily declaration of temperature
  * input: 
  * output:
  */
-create or replace function declare_health
+CREATE OR REPLACE FUNCTION declare_health (IN eid INT, IN ddate DATE, IN temp FLOAT(2))
+AS $$
+DECLARE 
+	fever BOOLEAN;
+BEGIN
+	IF eid NOT IN (SELECT eid FROM Employees)  THEN
+		RAISE 'The given eid % does not exist!', eid
+		USING HINT = 'Please check the eid';
+	END IF;
+	IF SELECT IsResigned(eid) THEN
+		RAISE 'Empoloyee % is resigned!', eid
+		USING HINT = 'Please check the eid';
+	END IF;
+	fever = CASE
+		WHEN temp>=37.5 THEN TRUE
+		WHEN temp <37.5 THEN FALSE
+	END;
+	INSERT INTO Health_declarations VALUES (eid, ddate, temperature, fever);
+END;
+$$ LANGUAGE plpgsql;
 
 
 /* 
@@ -333,31 +437,46 @@ create or replace function non_compliance
  * output: floor_number, room_number, meeting_date, start_time, start_hour, approved
  */
 CREATE OR REPLACE FUNCTION ViewBookingReport (IN sdate DATE, IN eid INT) 
-RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartTime TIME, StartHour INT, Approved VARCHAR(20)) AS $$
-    SELECT sfloor AS FloorNumber, room AS RoomNumber, sdate AS MeetingDate, stime AS StartTime, convert(int, cast(stime as varchar(8))) AS StartHour, CASE
-        WHEN s.manager_id IS NULL THEN 'No'
-        ELSE 'Yes'
-    END AS Approved
-    FROM Sessions s
-    WHERE s.booker_id = eid AND s.sdate > sdate
-    ORDER BY sdate ASC, stime ASC;
-$$ LANGUAGE sql;
-
+RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartHour TIME, Approved VARCHAR(20)) AS $$
+DECLARE
+    current_eid INNT;
+BEGIN
+    SELECT eid INTO current_eid FROM Employees WHERE eid = id;
+    IF current_eid IS NULL THEN
+        raise exception 'View Failed. There is no employee with such id.';
+    ELSE
+        RETURN QUERY
+            SELECT sfloor AS FloorNumber, room AS RoomNumber, sdate AS MeetingDate, stime AS StartHour, CASE
+                WHEN s.manager_id IS NULL THEN 'No'
+                ELSE 'Yes'
+                END AS Approved
+            FROM Sessions s
+            WHERE s.booker_id = eid AND s.sdate > sdate
+            ORDER BY sdate ASC, stime ASC;
+END
+$$ LANGUAGE plpgsql;
 
 /* 
  * Admin_3:  used by employee to find all future meetings this employee is going to have that are already approved.
  * input: sdate, eid
  * output: floor_number, room_number, meeting_date, start_time, start_hour
  */
-CREATE OR REPLACE FUNCTION ViewFutureMeeting (IN sdate DATE, IN eid INT) 
-RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartTime TIME, StartHour INT) AS $$
-    SELECT sfloor AS FloorNumber, room AS RoomNumber, sdate AS MeetingDate, stime AS StartTime, convert(int, cast(stime as varchar(8))) AS StartHour
-    FROM Sessions s
-    WHERE s.booker_id = eid AND s.sdate > sdate AND s.manager_id IS NOT NULL
-    ORDER BY sdate ASC, stime ASC;
-$$ LANGUAGE sql;
-
-
+CREATE OR REPLACE FUNCTION ViewFutureMeeting (IN sdate DATE, IN id INT) 
+RETURNS TABLE(FloorNumber INT, RoomNumber INT, MeetingDate Date, StartHour Time) AS $$
+DECLARE
+    current_eid INNT;
+BEGIN
+    SELECT eid INTO current_eid FROM Employees WHERE eid = id;
+    IF current_eid IS NULL THEN
+        raise exception 'View Failed. There is no employee with such id.';
+    ELSE
+        RETURN QUERY
+            SELECT sfloor AS FloorNumber, room AS RoomNumber, sdate AS MeetingDate, stime AS StartHour
+            FROM Sessions s
+            WHERE s.booker_id = id AND s.sdate > sdate AND s.manager_id IS NOT NULL
+            ORDER BY sdate ASC, stime ASC;
+END
+$$ LANGUAGE plpgsql;
 
 
 /* 
@@ -365,4 +484,20 @@ $$ LANGUAGE sql;
  * input: 
  * output:
  */
-create or replace function view_manager_report
+CREATE OR REPLACE FUNCTION view_manager_report (IN start_date DATE, IN eid INT)
+RETURNS TABLE(Floor INT, Room INT, Date DATE, Start_hour TIME, EmpID INT) AS $$
+DECLARE
+		mng_did INT;
+BEGIN
+		IF eid IN (SELECT eid FORM Managers) THEN
+		    SELECT did INTO mng_did FROM Managers WHERE Managers.eid=eid;
+			 RETURNS QUERY
+			   	SELECT sfloor, room, sdate, stime, booker_id
+			    FROM Sessions NATURAL JOIN Meeting_Rooms
+			    WHERE Meeting_Rooms.did= mng_did AND sdate >= start_date AND manager_id=eid
+                ORDERED BY sdate, stime;
+		ELSE
+			RETURN;
+		END IF
+END;
+$$ LANGUAGE plpgsql;
