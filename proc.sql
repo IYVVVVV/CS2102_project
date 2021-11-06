@@ -403,10 +403,10 @@ BEGIN
         IF meeting_room IS NULL THEN
             raise exception 'Leave failed. The meeting has been approved already.';
         END IF;
-            
+
         SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
         IF joined_id IS NULL THEN
-            raise exception 'Leave failed. The employee did not joind the session or has left.'
+            raise exception 'Leave failed. The employee has already leaved the meeting or did not join the meeting';
         END IF;
 
         WHILE temp > end_hour LOOP
