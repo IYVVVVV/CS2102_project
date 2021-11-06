@@ -398,7 +398,7 @@ DECLARE
     temp TIME := start_hour;
     current_eid INT;
     meeting_room INT;
-    resigned INT;
+    resigned DATE;
     fever_id INT;
     joined_id INT; 
 BEGIN
@@ -411,7 +411,7 @@ BEGIN
             raise exception 'Join failed. The meeting has been approved already.';
         END IF;
 
-        SELECT resign_date INTO resigned FROM Employees WHERE eid = id;
+        SELECT resigned_date INTO resigned FROM Employees WHERE eid = id;
         IF resigned IS NOT NULL AND meeting_date > resigned THEN
             raise exception 'Join failed. The employee has resigned.';
         END IF;
@@ -422,7 +422,7 @@ BEGIN
         END IF;
             
         SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
-        IF joined_id IS NOT NULL THEN
+        IF joined_id IS NULL THEN
             raise exception 'Join failed. The employee has already joined the meeting';
         END IF;
 
