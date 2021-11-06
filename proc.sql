@@ -266,8 +266,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
  
-CREATE OR REPLACE FUNCTION book_room (_room_num INTEGER, _room_floor INTEGER, _start_hour TIME, _end_hour TIME, _session_date DATE, _booker_id INTEGER)
-RETURNS INT AS $$
+CREATE OR REPLACE PROCEDURE book_room (_room_num INTEGER, _room_floor INTEGER, _start_hour TIME, _end_hour TIME, _session_date DATE, _booker_id INTEGER) AS $$
 DECLARE
 	current_hour TIME := _start_hour;
 	each_hour TIME[];
@@ -280,10 +279,12 @@ BEGIN
 	IF _session_date < now()::DATE OR (_session_date = now()::DATE AND _start_hour < now()::TIME) THEN
 		RAISE EXCEPTION 'A booking can only be made for future meetings';
 	END IF;
+	
 	-- check room exists
 	IF NOT EXISTS (SELECT 1 FROM Updates u WHERE u.room = _room_num AND u.ufloor = _room_floor) THEN 
 		RAISE EXCEPTION 'The input room does not exist.';
 	END IF;
+	
 	-- check for start and end hour
 	each_hour := '{00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00,
                   07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 
@@ -300,14 +301,17 @@ BEGIN
 	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
 		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
 	END IF;
+	
 	-- check booker has not resigned
 	IF IsResigned(_booker_id) THEN 
         RAISE EXCEPTION 'Booker has resigned!';
     END IF;
+	
 	-- check employee does not have fever
 	IF (SELECT fever FROM Health_declarations WHERE eid = _booker_id AND hdate = now()::DATE) THEN
 		RAISE EXCEPTION 'Booker is having a fever and cannot book!';
 	END IF;
+	
 	-- check the session has not been booked
 	SELECT 1 INTO has_been_booked
 	FROM Sessions s 
@@ -316,11 +320,14 @@ BEGIN
 		RAISE EXCEPTION 'The session has been booked!';
 	END IF;
 	
+	-- insert into Sessions
 	WHILE current_hour < _end_hour LOOP
 		INSERT INTO Sessions VALUES (_room_num, _room_floor, current_hour, _session_date, _booker_id, NULL);
 		current_hour := current_hour + '1 hour';
 	END LOOP;
-	RETURN 0;
+	
+	-- booker immediately joins
+	-- CALL JoinMeeting(_room_floor, _room_num, _session_date, _start_hour, _end_hour, _booker_id);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -329,8 +336,7 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE FUNCTION unbook_room (_room_num INTEGER, _room_floor INTEGER, _start_hour TIME, _end_hour TIME, _session_date DATE, _unbooker_id INTEGER)
-RETURNS INT AS $$
+CREATE OR REPLACE PROCEDURE unbook_room (_room_num INTEGER, _room_floor INTEGER, _start_hour TIME, _end_hour TIME, _session_date DATE, _unbooker_id INTEGER) AS $$
 DECLARE
 	current_hour TIME := _start_hour;
 	unbooker_ok INTEGER := 1;
@@ -338,11 +344,13 @@ DECLARE
 	end_hour_ok INTEGER := 0;
 	each_hour TIME[];
 	var_hour TIME;
+	booker_eid INTEGER;
 BEGIN
 	-- check room exists
 	IF NOT EXISTS (SELECT 1 FROM Updates u WHERE u.room = _room_num AND u.ufloor = _room_floor) THEN 
 		RAISE EXCEPTION 'The input room does not exist.';
 	END IF;
+	
 	-- check for start and end hour
 	each_hour := '{00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00,
                   07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 
@@ -359,24 +367,32 @@ BEGIN
 	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
 		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
 	END IF;
-	-- check unbooker_id is book_id
+	
+	-- check the session specified exists and unbooker_id is book_id
 	WHILE current_hour < _end_hour LOOP
-		SELECT booker_id FROM Sessions s WHERE s.room = _room_num AND s.sfloor = _room_floor AND s.sdate = _session_date;
-		IF _unbooker_id <> booker_id THEN 
+		SELECT s.booker_id INTO booker_eid FROM Sessions s WHERE s.room = _room_num AND s.sfloor = _room_floor AND s.sdate = _session_date AND s.stime = current_hour;
+		IF booker_eid IS NULL THEN 
+			RAISE EXCEPTION 'The session does not exist';
+		END IF;
+		IF _unbooker_id <> booker_eid THEN 
 			unbooker_ok := 0;
 		END IF;
 		current_hour := current_hour + '1 hour';
 	END LOOP;
-	IF unbooker_ok = 1 THEN
+	IF unbooker_ok = 0 THEN
 		RAISE EXCEPTION 'The unbooker and booker must be the same person';
 	END IF;
-	-- check unbook everything
-	IF EXISTS (SELECT 1 FROM Sessions s WHERE s.room = _room_num AND s.sfloor = _room_floor AND s.sdate = _session_date AND s.stime = _start_hour - '1 hour' AND s.booker_id = _unbooker_id) THEN
+	
+	-- check unbook everything (not working)
+	/*IF EXISTS (SELECT 1 FROM Sessions s WHERE s.room = _room_num AND s.sfloor = _room_floor AND s.sdate = _session_date AND s.stime = (_start_hour - '1 hour') AND s.booker_id = _unbooker_id) THEN
 		RAISE EXCEPTION 'The unbook must be performed on the whole meeting!';
 	END IF;
-	IF EXISTS (SELECT 1 FROM Sessions s WHERE s.room = _room_num AND s.sfloor = _room_floor AND s.sdate = _session_date AND s.stime = _start_hour + '1 hour' AND s.booker_id = _unbooker_id) THEN
+	IF EXISTS (SELECT 1 FROM Sessions s WHERE s.room = _room_num AND s.sfloor = _room_floor AND s.sdate = _session_date AND s.stime = (_start_hour + '1 hour') AND s.booker_id = _unbooker_id) THEN
 		RAISE EXCEPTION 'The unbook must be performed on the whole meeting!';
-	END IF;
+	END IF;*/
+	
+	-- remove joins 
+	
 	-- perform deletion
 	DELETE FROM Sessions s
 	WHERE s.room = _room_num
@@ -384,7 +400,6 @@ BEGIN
 	AND s.sdate = _session_date
 	AND s.stime >= _start_hour
 	AND s.stime < _end_hour;
-	RETURN 0;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -401,20 +416,32 @@ DECLARE
     resigned INT;
     fever_id INT;
     joined_id INT; 
+	approver_id INT;
+	booker_eid INT;
 BEGIN
     SELECT eid INTO current_eid FROM Employees WHERE eid = id;
     IF current_eid IS NULL THEN
         raise exception 'Join Failed. There is no employee with such id.';
     ELSE
+		-- check the session specified exists
+		WHILE temp < end_hour LOOP
+			SELECT s.booker_id INTO booker_eid FROM Sessions s WHERE s.room = room_number AND s.sfloor = floor_number AND s.sdate = meeting_date AND s.stime = temp;
+			IF booker_eid IS NULL THEN 
+				RAISE EXCEPTION 'The session does not exist';
+			END IF;
+			temp := temp + '1 hour';
+		END LOOP;
+		
+		-- check approver is NULL
         SELECT room INTO meeting_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL;
         IF meeting_room IS NULL THEN
             raise exception 'Join failed. The meeting has been approved already.';
         END IF;
 
-        SELECT resign_date INTO resigned FROM Employees WHERE eid = id;
-        IF resigned IS NOT NULL AND meeting_date > resigned THEN
-            raise exception 'Join failed. The employee has resigned.';
-        END IF;
+        -- check booker has not resigned
+		IF IsResigned(eid) THEN 
+			RAISE EXCEPTION 'THe employee has resigned!';
+		END IF;
 
         SELECT h.eid INTO fever_id FROM Health_declarations h WHERE h.eid = id and fever = true;
         IF fever_id IS NOT NULL THEN
