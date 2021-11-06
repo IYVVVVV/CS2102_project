@@ -121,6 +121,8 @@ BEGIN
 	SET manager_id = _manager_id, udate = _update_date, new_cap = _new_capacity
 	WHERE room = _room_num AND ufloor = _room_floor;
 	RETURN 0;
+	-- unbook any booked sessions with more participants than capacity after _update_date
+	
 END
 $$ LANGUAGE plpgsql;
 
@@ -246,7 +248,7 @@ BEGIN
 	WHERE u.new_cap >= _capacity
 	AND NOT (s.room = r.room AND s.sfloor = r.mfloor AND s.sdate = _date AND s.stime >= _start_hour AND s.stime < _end_hour);
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql;
 
 
 /* 
@@ -302,6 +304,10 @@ BEGIN
 	IF IsResigned(_booker_id) THEN 
         RAISE EXCEPTION 'Booker has resigned!';
     END IF;
+	-- check employee does not have fever
+	IF (SELECT fever FROM Health_declarations WHERE eid = _booker_id AND hdate = now()::DATE) THEN
+		RAISE EXCEPTION 'Booker is having a fever and cannot book!';
+	END IF;
 	-- check the session has not been booked
 	SELECT 1 INTO has_been_booked
 	FROM Sessions s 
@@ -316,7 +322,7 @@ BEGIN
 	END LOOP;
 	RETURN 0;
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql;
 
 /* 
  * Core_3: remove booking of a given room
@@ -334,7 +340,7 @@ BEGIN
 	AND s.stime < _end_hour;
 	RETURN 0;
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql;
 
 /* 
  * Core_4: join a booked meeting room
