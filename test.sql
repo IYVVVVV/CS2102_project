@@ -34,6 +34,10 @@ call LeaveMeeting(9, 9, '2021-12-05', '12:00', '13:00', 19); --invalid: the meet
 call LeaveMeeting(10, 10, '2021-12-05', '13:00', '14:00', 20); --valid: the employee with id 20 left the session
 call LeaveMeeting(10, 10, '2021-12-05', '13:00', '14:00', 20); --(repeate once more) invalid: the employee has already left
 
+--C6: approve_meeting
+
+
+
 --H1: declare_health
 select "declare_health"(1, '2021-11-05', '36');--invalid, resign
 select "declare_health"(4, '2021-11-05', '38');--invalid, exist
