@@ -246,7 +246,7 @@ BEGIN
 	WHERE u.new_cap >= _capacity
 	AND NOT (s.room = r.room AND s.sfloor = r.mfloor AND s.sdate = _date AND s.stime >= _start_hour AND s.stime < _end_hour);
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql;
 
 
 /* 
@@ -334,7 +334,7 @@ BEGIN
 	AND s.stime < _end_hour;
 	RETURN 0;
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql;
 
 /* 
  * Core_4: join a booked meeting room
