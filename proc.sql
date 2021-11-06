@@ -415,12 +415,16 @@ DECLARE
     temp TIME := start_hour;
     current_eid INT;
     meeting_room INT;
-    resigned INT;
+    resigned DATE;
     fever_id INT;
     joined_id INT; 
 	approver_id INT;
 	booker_eid INT;
 BEGIN
+    IF start_hour > end_hour THEN
+    raise exception 'Join failed because start time is after end time.';
+    END IF;
+    
     SELECT eid INTO current_eid FROM Employees WHERE eid = id;
     IF current_eid IS NULL THEN
         raise exception 'Join Failed. There is no employee with such id.';
@@ -440,13 +444,13 @@ BEGIN
             raise exception 'Join failed. The meeting has been approved already.';
         END IF;
 
-        -- check booker has not resigned
-		IF IsResigned(eid) THEN 
-			RAISE EXCEPTION 'THe employee has resigned!';
-		END IF;
-		
-		-- check capacity 
-		
+
+        SELECT resigned_date INTO resigned FROM Employees WHERE eid = id;
+        IF resigned IS NOT NULL AND meeting_date > resigned THEN
+            raise exception 'Join failed. The employee has resigned.';
+        END IF;
+
+
         SELECT h.eid INTO fever_id FROM Health_declarations h WHERE h.eid = id and fever = true;
         IF fever_id IS NOT NULL THEN
             raise exception 'Join failed. The employee has a fever.';
@@ -457,14 +461,13 @@ BEGIN
             raise exception 'Join failed. The employee has already joined the meeting';
         END IF;
 
-        WHILE temp > end_hour LOOP
+        WHILE temp < end_hour LOOP
             INSERT INTO Joins VALUES (id, room_number, floor_number, temp, meeting_date);
             temp := temp + '1 hour';
         END LOOP;
     END IF;
 END;
 $$ LANGUAGE plpgsql;
-
 
 /* 
  * Core_5: leave a booked meeting room
@@ -478,6 +481,10 @@ DECLARE
     meeting_room INT;
     joined_id INT; 
 BEGIN
+    IF start_hour > end_hour THEN
+    raise exception 'Leave failed because start time is after end time.';
+    END IF;
+    
     SELECT eid INTO current_eid FROM Employees WHERE eid = id;
     IF current_eid IS NULL THEN
         raise exception 'Leave Failed. There is no employee with such id.';
@@ -492,7 +499,7 @@ BEGIN
             raise exception 'Leave failed. The employee has already leaved the meeting or did not join the meeting';
         END IF;
 
-        WHILE temp > end_hour LOOP
+        WHILE temp < end_hour LOOP
             DELETE FROM Joins WHERE eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
             temp := temp + '1 hour';
         END LOOP;
@@ -568,7 +575,26 @@ $$ LANGUAGE plpgsql;
  * output:
  */
 --create or replace function contact_tracing
+CREATE OR REPLACE FUNCTION contact_tracing (IN fever_eid INT, IN fever_date DATE)
+RETURN TABLE (eid INT)
+AS $$
+	--REMOVE eid from all future meetings
+	DELETE FROM Joins WHERE eid=fever_eid AND jdate>= now()::date
+	--Cancel booking不知道怎么写
+	--收回booking权限也不知道怎么写，可以在book的函数里检查fever，这里可以不写。
+	--FIND all the eids in same session in the past three days
+	FOR contact_eid IN SELECT eid INTO  FROM Joins WHERE  (room, jfloor,jdate, jtime) IN
+	(
+		SELECT (room, jfloor, jdate, jtime)
+		FROM Joins 
+		WHERE eid=fever_eid AND jdate <= fever_date -3
+	) LOOP -- delete the contact_eid from meetings in future 7 days
+		RETURN NEXT contact_eid;
+		DELETE FROM Joins WHERE eid=contact_eid AND jdate>=now()::date AND jdate<=now()::date +7;
+	END LOOP;
+	
 
+$$LANGUAGE plpgsql;
 
 /* 
  * Admin_1: find all employees that do not comply with the daily health declaration 
