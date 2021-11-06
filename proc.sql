@@ -329,9 +329,55 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE FUNCTION unbook_room (_room_num INTEGER, _room_floor INTEGER, _start_hour TIME, _end_hour TIME, _session_date DATE, _booker_id INTEGER)
+CREATE OR REPLACE FUNCTION unbook_room (_room_num INTEGER, _room_floor INTEGER, _start_hour TIME, _end_hour TIME, _session_date DATE, _unbooker_id INTEGER)
 RETURNS INT AS $$
+DECLARE
+	current_hour TIME := _start_hour;
+	unbooker_ok INTEGER := 1;
+	start_hour_ok INTEGER := 0;
+	end_hour_ok INTEGER := 0;
+	each_hour TIME[];
+	var_hour TIME;
 BEGIN
+	-- check room exists
+	IF NOT EXISTS (SELECT 1 FROM Updates u WHERE u.room = _room_num AND u.ufloor = _room_floor) THEN 
+		RAISE EXCEPTION 'The input room does not exist.';
+	END IF;
+	-- check for start and end hour
+	each_hour := '{00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00,
+                  07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 
+                  13:00, 14:00, 15:00, 16:00, 17:00, 18:00,
+                  19:00, 20:00, 21:00, 22:00, 23:00, 24:00}'::TIME[];
+	FOREACH var_hour IN ARRAY each_hour LOOP
+		IF var_hour = _start_hour THEN
+			start_hour_ok := 1;
+		END IF;
+		IF var_hour = _end_hour THEN
+			end_hour_ok := 1;
+		END IF;
+	END LOOP;
+	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
+		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
+	END IF;
+	-- check unbooker_id is book_id
+	WHILE current_hour < _end_hour LOOP
+		SELECT booker_id FROM Sessions s WHERE s.room = _room_num AND s.sfloor = _room_floor AND s.sdate = _session_date;
+		IF _unbooker_id <> booker_id THEN 
+			unbooker_ok := 0;
+		END IF;
+		current_hour := current_hour + '1 hour';
+	END LOOP;
+	IF unbooker_ok = 1 THEN
+		RAISE EXCEPTION 'The unbooker and booker must be the same person';
+	END IF;
+	-- check unbook everything
+	IF EXISTS (SELECT 1 FROM Sessions s WHERE s.room = _room_num AND s.sfloor = _room_floor AND s.sdate = _session_date AND s.stime = _start_hour - '1 hour' AND s.booker_id = _unbooker_id) THEN
+		RAISE EXCEPTION 'The unbook must be performed on the whole meeting!';
+	END IF;
+	IF EXISTS (SELECT 1 FROM Sessions s WHERE s.room = _room_num AND s.sfloor = _room_floor AND s.sdate = _session_date AND s.stime = _start_hour + '1 hour' AND s.booker_id = _unbooker_id) THEN
+		RAISE EXCEPTION 'The unbook must be performed on the whole meeting!';
+	END IF;
+	-- perform deletion
 	DELETE FROM Sessions s
 	WHERE s.room = _room_num
 	AND s.sfloor = _room_floor
@@ -412,7 +458,7 @@ BEGIN
             
         SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
         IF joined_id IS NULL THEN
-            raise exception 'Leave failed. The employee did not joind the session or has left.'
+            raise exception 'Leave failed. The employee did not joind the session or has left.';
         END IF;
 
         WHILE temp > end_hour LOOP
@@ -490,7 +536,7 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-create or replace function contact_tracing
+--create or replace function contact_tracing
 
 
 /* 
@@ -498,7 +544,7 @@ create or replace function contact_tracing
  * input: 
  * output:
  */
-create or replace function non_compliance
+--create or replace function non_compliance
 
 
 /* 
