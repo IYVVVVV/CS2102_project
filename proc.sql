@@ -121,8 +121,9 @@ BEGIN
 	SET manager_id = _manager_id, udate = _update_date, new_cap = _new_capacity
 	WHERE room = _room_num AND ufloor = _room_floor;
 	RETURN 0;
-	-- unbook any booked sessions with more participants than capacity after _update_date
-	
+	-- unbook any booked sessions with more participants than capacity after update_date
+	-- update date default is today
+	-- 
 END
 $$ LANGUAGE plpgsql;
 
@@ -275,6 +276,7 @@ DECLARE
 	end_hour_ok INTEGER := 0;
 	has_been_booked INTEGER := 0;
 BEGIN
+	-- check eid in booker table
 	-- check future meetings
 	IF _session_date < now()::DATE OR (_session_date = now()::DATE AND _start_hour < now()::TIME) THEN
 		RAISE EXCEPTION 'A booking can only be made for future meetings';
@@ -442,7 +444,9 @@ BEGIN
 		IF IsResigned(eid) THEN 
 			RAISE EXCEPTION 'THe employee has resigned!';
 		END IF;
-
+		
+		-- check capacity 
+		
         SELECT h.eid INTO fever_id FROM Health_declarations h WHERE h.eid = id and fever = true;
         IF fever_id IS NOT NULL THEN
             raise exception 'Join failed. The employee has a fever.';
