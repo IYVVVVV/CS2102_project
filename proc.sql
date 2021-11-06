@@ -422,7 +422,7 @@ BEGIN
         END IF;
             
         SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
-        IF joined_id IS NULL THEN
+        IF joined_id IS NOT NULL THEN
             raise exception 'Join failed. The employee has already joined the meeting';
         END IF;
 
@@ -433,7 +433,6 @@ BEGIN
     END IF;
 END;
 $$ LANGUAGE plpgsql;
-
 
 /* 
  * Core_5: leave a booked meeting room
