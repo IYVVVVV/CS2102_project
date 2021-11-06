@@ -402,6 +402,10 @@ DECLARE
     fever_id INT;
     joined_id INT; 
 BEGIN
+    IF start_hour > end_hour THEN
+    raise exception 'Join failed because start time is after end time.';
+    END IF;
+    
     SELECT eid INTO current_eid FROM Employees WHERE eid = id;
     IF current_eid IS NULL THEN
         raise exception 'Join Failed. There is no employee with such id.';
@@ -446,6 +450,10 @@ DECLARE
     meeting_room INT;
     joined_id INT; 
 BEGIN
+    IF start_hour > end_hour THEN
+    raise exception 'Leave failed because start time is after end time.';
+    END IF;
+    
     SELECT eid INTO current_eid FROM Employees WHERE eid = id;
     IF current_eid IS NULL THEN
         raise exception 'Leave Failed. There is no employee with such id.';
