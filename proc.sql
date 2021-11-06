@@ -426,7 +426,7 @@ BEGIN
             raise exception 'Join failed. The employee has already joined the meeting';
         END IF;
 
-        WHILE temp > end_hour LOOP
+        WHILE temp < end_hour LOOP
             INSERT INTO Joins VALUES (id, room_number, floor_number, temp, meeting_date);
             temp := temp + '1 hour';
         END LOOP;
@@ -460,7 +460,7 @@ BEGIN
             raise exception 'Leave failed. The employee has already leaved the meeting or did not join the meeting';
         END IF;
 
-        WHILE temp > end_hour LOOP
+        WHILE temp < end_hour LOOP
             DELETE FROM Joins WHERE eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
             temp := temp + '1 hour';
         END LOOP;
