@@ -91,6 +91,30 @@ END
 $$ LANGUAGE plpgsql;
 
 
+-- trigger such that if no one joins a session in Joins, the session is removed from Sessions table
+-- create or replace function f_check_someone_joins_session()
+-- returns trigger as $$
+-- declare
+--     num_participant INT;
+-- begin
+--     select count(*) into num_participant
+--     from Joins as j
+--     where j.room = OLD.room and j.jfloor = OLD.jfloor
+--         and j.jtime = OLD.jtime and j.jdate = OLD.jdate;
+--     if num_participant = 0 then
+--         delete from Sessions where Sessions.room = OLD.room and Sessions.sfloor = OLD.jfloor
+--                                 and Sessions.stime = OLD.jtime and Sessions.sdate = OLD.jdate;
+--     end if;
+--     return NULL;
+-- end;
+-- $$ LANGUAGE plpgsql;
+
+-- create trigger check_someone_joins_session
+-- after delete on Joins
+-- for each row
+-- execute function f_check_someone_joins_session();
+
+
 /* 
  * Basic_4: change the capacity of the room
  * input: 
@@ -101,6 +125,8 @@ RETURNS INT AS $$
 DECLARE
 	manager_did INT;
 	room_did INT;
+    num_participant INT;
+    session record;
 BEGIN
 	-- check room exists
 	IF NOT EXISTS (SELECT 1 FROM Updates u WHERE u.room = _room_num AND u.ufloor = _room_floor) THEN 
@@ -117,12 +143,29 @@ BEGIN
 		RAISE EXCEPTION 'Manager from different department cannot change meeting room capacity.';
 	END IF;
 	-- update the Updates table
-	UPDATE Updates
-	SET manager_id = _manager_id, udate = _update_date, new_cap = _new_capacity
-	WHERE room = _room_num AND ufloor = _room_floor;
-	RETURN 0;
-	-- unbook any booked sessions with more participants than capacity after _update_date
+	insert into Updates(manager_id, room, ufloor, udate, new_cap)
+        values(_manager_id, _room_num, _room_floor, _update_date, _new_capacity);
 	
+	-- unbook any booked sessions with more participants than capacity after _update_date
+    -- remove affected joins
+    for session in select * from Sessions where Sessions.sdate > _update_date
+                                            and Sessions.sfloor = _room_floor and Sessions.room = _room_num
+    LOOP
+        select count(*) into num_participant
+        from Joins as j
+        where j.room = session.room and j.jfloor = session.sfloor
+            and j.jtime = session.stime and j.jdate = session.sdate;
+        if num_participant > _new_capacity then
+            delete from Joins where Joins.room = session.room and Joins.jfloor = session.sfloor
+                                and Joins.jtime = session.stime and Joins.jdate = session.sdate;
+        end if;
+    end LOOP;
+    -- remove affected sessions
+    delete from Sessions where (
+        select count(*) from Joins as j where j.room = Sessions.room and j.jfloor = Sessions.sfloor
+            and j.jtime = Sessions.stime and j.jdate = Sessions.sdate
+        ) = 0;
+    return 0;
 END
 $$ LANGUAGE plpgsql;
 
@@ -535,7 +578,6 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
---create or replace function contact_tracing
 
 
 /* 
