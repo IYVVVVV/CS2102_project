@@ -445,6 +445,10 @@ DECLARE
     fever_id INT;
     joined_id INT; 
 BEGIN
+    IF start_hour > end_hour THEN
+    raise exception 'Join failed because start time is after end time.';
+    END IF;
+    
     SELECT eid INTO current_eid FROM Employees WHERE eid = id;
     IF current_eid IS NULL THEN
         raise exception 'Join Failed. There is no employee with such id.';
@@ -489,6 +493,10 @@ DECLARE
     meeting_room INT;
     joined_id INT; 
 BEGIN
+    IF start_hour > end_hour THEN
+    raise exception 'Leave failed because start time is after end time.';
+    END IF;
+    
     SELECT eid INTO current_eid FROM Employees WHERE eid = id;
     IF current_eid IS NULL THEN
         raise exception 'Leave Failed. There is no employee with such id.';
@@ -578,7 +586,25 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-
+--create or replace function contact_tracing
+CREATE OR REPLACE FUNCTION contact_tracing (IN fever_eid INT, IN fever_date DATE)
+RETURN TABLE (eid INT)
+AS $$
+	--REMOVE eid from all future meetings
+	DELETE FROM Joins WHERE eid=fever_eid AND jdate>= now()::date
+	--Cancel booking不知道怎么写
+	--收回booking权限也不知道怎么写，可以在book的函数里检查fever，这里可以不写。
+	--FIND all the eids in same session in the past three days
+	FOR contact_eid IN SELECT eid INTO  FROM Joins WHERE  (room, jfloor,jdate, jtime) IN
+	(
+		SELECT (room, jfloor, jdate, jtime)
+		FROM Joins 
+		WHERE eid=fever_eid AND jdate <= fever_date -3
+	) LOOP -- delete the contact_eid from meetings in future 7 days
+		RETURN NEXT contact_eid;
+		DELETE FROM Joins WHERE eid=contact_eid AND jdate>=now()::date AND jdate<=now()::date +7;
+	END LOOP;
+$$LANGUAGE plpgsql;
 
 /* 
  * Admin_1: find all employees that do not comply with the daily health declaration 
