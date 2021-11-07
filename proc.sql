@@ -128,25 +128,30 @@ DECLARE
     num_participant INT;
     session record;
 BEGIN
+	-- check update time is later than current
+	
 	-- check room exists
 	IF NOT EXISTS (SELECT 1 FROM Updates u WHERE u.room = _room_num AND u.ufloor = _room_floor) THEN 
 		RAISE EXCEPTION 'The input room does not exist.';
 	END IF;
+	
 	-- check manager is valid
 	IF NOT EXISTS (SELECT 1 FROM Managers m WHERE m.eid = _manager_id) THEN 
 		RAISE EXCEPTION 'Input eid is not a manager id.';
 	END IF;
+	
 	-- check manager is in the department
 	SELECT did INTO room_did FROM Meeting_Rooms r WHERE r.room = _room_num AND r.mfloor = _room_floor;
 	SELECT did INTO manager_did FROM Managers NATURAL JOIN Employees WHERE eid = _manager_id;
 	IF (room_did <> manager_did) THEN
 		RAISE EXCEPTION 'Manager from different department cannot change meeting room capacity.';
 	END IF;
+	
 	-- update the Updates table
 	insert into Updates(manager_id, room, ufloor, udate, new_cap)
         values(_manager_id, _room_num, _room_floor, _update_date, _new_capacity);
 	
-	-- unbook any booked sessions with more participants than capacity after _update_date
+	
     -- remove affected joins
     for session in select * from Sessions where Sessions.sdate > _update_date
                                             and Sessions.sfloor = _room_floor and Sessions.room = _room_num
@@ -299,15 +304,6 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE FUNCTION IsResigned(IN _eid INTEGER)
-RETURNS BOOLEAN AS $$
-DECLARE
-    rdate DATE;
-BEGIN 
-    SELECT resigned_date INTO rdate FROM Employees WHERE Employees.eid = _eid;
-	RETURN rdate IS NOT NULL AND rdate<=now()::date;
-END;
-$$ LANGUAGE plpgsql;
  
 CREATE OR REPLACE PROCEDURE book_room (_room_num INTEGER, _room_floor INTEGER, _start_hour TIME, _end_hour TIME, _session_date DATE, _booker_id INTEGER) AS $$
 DECLARE
@@ -318,7 +314,11 @@ DECLARE
 	end_hour_ok INTEGER := 0;
 	has_been_booked INTEGER := 0;
 BEGIN
-	-- check eid in booker table
+	-- check id in booker table
+	IF NOT EXISTS (SELECT 1 FROM Bookers b WHERE b.eid = _booker_id) THEN 
+		RAISE EXCEPTION 'The booker is not authorized to book a room.';
+	END IF;
+	
 	-- check future meetings
 	IF _session_date < now()::DATE OR (_session_date = now()::DATE AND _start_hour < now()::TIME) THEN
 		RAISE EXCEPTION 'A booking can only be made for future meetings';
@@ -347,7 +347,7 @@ BEGIN
 	END IF;
 	
 	-- check booker has not resigned
-	IF IsResigned(_booker_id) THEN 
+	IF is_resigned(_booker_id) THEN 
         RAISE EXCEPTION 'Booker has resigned!';
     END IF;
 	
@@ -371,7 +371,7 @@ BEGIN
 	END LOOP;
 	
 	-- booker immediately joins
-	-- CALL JoinMeeting(_room_floor, _room_num, _session_date, _start_hour, _end_hour, _booker_id);
+	CALL JoinMeeting(_room_floor, _room_num, _session_date, _start_hour, _end_hour, _booker_id);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -471,7 +471,7 @@ BEGIN
     IF current_eid IS NULL THEN
         raise exception 'Join Failed. There is no employee with such id.';
     ELSE
-		-- check the session specified exists
+		/*-- check the session specified exists
 		WHILE temp < end_hour LOOP
 			SELECT s.booker_id INTO booker_eid FROM Sessions s WHERE s.room = room_number AND s.sfloor = floor_number AND s.sdate = meeting_date AND s.stime = temp;
 			IF booker_eid IS NULL THEN 
@@ -484,7 +484,7 @@ BEGIN
         SELECT room INTO meeting_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL;
         IF meeting_room IS NULL THEN
             raise exception 'Join failed. The meeting has been approved already.';
-        END IF;
+        END IF;*/
 
 
         SELECT resigned_date INTO resigned FROM Employees WHERE eid = id;
@@ -617,7 +617,7 @@ $$ LANGUAGE plpgsql;
  * output:
  */
 --create or replace function contact_tracing
-CREATE OR REPLACE FUNCTION contact_tracing (IN fever_eid INT, IN fever_date DATE)
+/*CREATE OR REPLACE FUNCTION contact_tracing (IN fever_eid INT, IN fever_date DATE)
 RETURN TABLE (eid INT)
 AS $$
 	--REMOVE eid from all future meetings
@@ -634,7 +634,7 @@ AS $$
 		RETURN NEXT contact_eid;
 		DELETE FROM Joins WHERE eid=contact_eid AND jdate>=now()::date AND jdate<=now()::date +7;
 	END LOOP;
-$$LANGUAGE plpgsql;
+$$LANGUAGE plpgsql;*/
 
 /* 
  * Admin_1: find all employees that do not comply with the daily health declaration 
