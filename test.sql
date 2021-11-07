@@ -26,7 +26,8 @@ call JoinMeeting(10, 10, '2021-12-05', '13:00', '11:00', 9); --invalid: the star
 call JoinMeeting(9, 9, '2021-12-05', '13:00', '14:00', 40); --invalid: no employee with such id
 call JoinMeeting(9, 9, '2021-12-05', '13:00', '14:00', 9); --invalid: the session has been approved
 call JoinMeeting(10, 10, '2021-12-05', '13:00', '14:00', 3); --invalid: the employee has resigned
-call JoinMeeting(10, 10, '2021-11-04', '18:00', '19:00', 5); --invalid: the employee has a fever
+call JoinMeeting(10, 10, '2021-12-05', '13:00', '14:00', 7); --invalid: the employee has a fever
+call JoinMeeting(10, 10, '2021-11-10', '18:00', '19:00', 6); --invalid: the employee had a close contact with someone having a fever
 call JoinMeeting(10, 10, '2021-11-04', '12:00', '13:00', 9); --invalid: there is no session with given room, floor, date, time
 call JoinMeeting(10, 10, '2021-12-05', '13:00', '14:00', 9); --invalid: the employee has joined another session held at the same time
 call JoinMeeting(10, 10, '2021-12-05', '13:00', '14:00', 10); --invalid: the number of participants has reached the capacity limit of the room
