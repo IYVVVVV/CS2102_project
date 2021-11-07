@@ -42,7 +42,7 @@ BEGIN
             RAISE EXCEPTION 'Remove failed. Some employees in this department % is not removed yet', _did;
         END IF;
     END LOOP;
-    IF (SELECT count(*) FROM Meeting_Rooms WHERE Meeting_Rooms.did=_did ) <> 0 THEN
+    IF (SELECT COUNT(*) FROM Meeting_Rooms WHERE Meeting_Rooms.did=_did ) <> 0 THEN
         RAISE EXCEPTION 'Remove failed. Delete all meeting rooms inside department % before deleting the department!', _did;
     END IF;
     RETURN OLD;
@@ -67,7 +67,7 @@ DECLARE
     emps record;
 BEGIN
     SELECT did INTO current_did FROM Departments WHERE did = _did;
-    if current_did is NULL THEN
+    IF current_did is NULL THEN
         RAISE EXCEPTION 'Remove failed. There is no department with such id.';
     END IF;
     DELETE FROM Departments WHERE Departments.did = _did;
@@ -178,11 +178,11 @@ BEGIN
     FOR session in SELECT * FROM Sessions WHERE Sessions.sdate > NEW.udate
                                             AND Sessions.sfloor = NEW.ufloor AND Sessions.room = NEW.room
     LOOP
-        SELECT count(*) INTO num_participant
+        SELECT COUNT(*) INTO num_participant
         FROM Joins AS j
         WHERE j.room = session.room and j.jfloor = session.sfloor
             and j.jtime = session.stime and j.jdate = session.sdate;
-        if num_participant > NEW.new_cap THEN
+        IF num_participant > NEW.new_cap THEN
             DELETE FROM Joins WHERE Joins.room = session.room and Joins.jfloor = session.sfloor
                                 and Joins.jtime = session.stime and Joins.jdate = session.sdate;
         END IF;
@@ -190,7 +190,7 @@ BEGIN
     
     -- remove affected sessions
     DELETE FROM Sessions WHERE (
-        SELECT count(*) FROM Joins AS j WHERE j.room = Sessions.room and j.jfloor = Sessions.sfloor
+        SELECT COUNT(*) FROM Joins AS j WHERE j.room = Sessions.room and j.jfloor = Sessions.sfloor
             and j.jtime = Sessions.stime and j.jdate = Sessions.sdate
         ) = 0;
 
@@ -199,7 +199,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER check_change_capacity_affected_sessions
-after insert on Updates
+after insert ON Updates
 FOR EACH ROW
 EXECUTE FUNCTION f_check_change_capacity_affected_sessions();
 
@@ -324,7 +324,7 @@ DECLARE
     session_to_remove record;
 BEGIN
     -- check the update is to resign an employee
-    if NEW.resigned_date = OLD.resigned_date THEN
+    IF NEW.resigned_date = OLD.resigned_date THEN
         RETURN NULL;
     END IF;
 
@@ -357,7 +357,7 @@ EXECUTE FUNCTION f_check_remove_employee_affected_sessions();
  * Basic_6: remove a employee
  * input: eid, date
  * this FUNCTION will SET the resigned_date to be non-null value
- * date is the last day of work, thus the employee still needs to DECLAREhealth for on this date
+ * date is the last day of work, thus the employee still needs to declare health for on this date
  * output: 0 success
  */
 CREATE OR REPLACE FUNCTION remove_employee (_eid int, _resigned_date date)
@@ -626,7 +626,7 @@ RETURNS TRIGGER AS $$
 DECLARE
     num_participant INT;
 BEGIN
-    if NEW.jdate > now()::date OR (NEW.jdate = now()::date and NEW.jtime > now()::time) THEN
+    IF NEW.jdate > now()::date OR (NEW.jdate = now()::date AND NEW.jtime > now()::time) THEN
         RETURN NEW;
     END IF;
     RAISE EXCEPTION 'Join failed. Can only join future meetings.';
@@ -635,7 +635,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER check_join_only_future_meeting
-BEFORE INSERT OR UPDATE on Joins
+BEFORE INSERT OR UPDATE ON Joins
 FOR EACH ROW
 EXECUTE FUNCTION f_check_join_only_future_meeting();
 
@@ -655,7 +655,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER check_only_not_resign_can_join
-BEFORE INSERT OR UPDATE on Joins
+BEFORE INSERT OR UPDATE ON Joins
 FOR EACH ROW
 EXECUTE FUNCTION f_check_only_not_resign_can_join();
 
@@ -675,7 +675,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER check_only_no_fever_can_join
-BEFORE INSERT OR UPDATE on Joins
+BEFORE INSERT OR UPDATE ON Joins
 FOR EACH ROW
 EXECUTE FUNCTION f_check_only_no_fever_can_join();
 
@@ -695,7 +695,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER check_only_no_close_contact_can_join
-BEFORE INSERT OR UPDATE on Joins
+BEFORE INSERT OR UPDATE ON Joins
 FOR EACH ROW
 EXECUTE FUNCTION f_check_only_no_close_contact_can_join();
 
@@ -715,7 +715,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER check_whether_have_joined_session_held_meanwhile
-BEFORE INSERT OR UPDATE on Joins
+BEFORE INSERT OR UPDATE ON Joins
 FOR EACH ROW
 EXECUTE FUNCTION f_check_whether_have_joined_session_held_meanwhile();
 
@@ -737,7 +737,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER check_whether_reach_capacity_limit
-BEFORE INSERT OR UPDATE on Joins
+BEFORE INSERT OR UPDATE ON Joins
 FOR EACH ROW
 EXECUTE FUNCTION f_check_whether_reach_capacity_limit();
 
@@ -912,7 +912,7 @@ BEGIN
     END IF;
     
 	-- get room department id and check room exists or not 
-    SELECT did INTO expect_did FROM Meeting_Rooms WHERE mfloor=floor_num and Room=room_num;
+    SELECT did INTO expect_did FROM Meeting_Rooms WHERE mfloor=floor_num AND Room=room_num;
 	IF expect_did IS NULL THEN
 		RAISE 'The given room % in % floor does not exist!', room_num, floor_num;
 	END IF;
@@ -992,7 +992,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- trigger such that only a non-resigned employee can DECLAREhealth on that day
+-- trigger such that only a non-resigned employee can declare health on that day
 CREATE OR REPLACE FUNCTION f_check_non_resigned_declare_health()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -1081,13 +1081,13 @@ BEGIN
         RAISE EXCEPTION 'Contact tracing failed. No employee with the given eid.';
     END IF;
 	-- check eid is having fever
-    SELECT count(*) INTO num_records FROM Health_declarations
+    SELECT COUNT(*) INTO num_records FROM Health_declarations
         WHERE Health_declarations.eid = _eid AND hdate = now()::date;
     IF num_records = 0 THEN
         RAISE EXCEPTION 'Contact tracing failed. No temperature DECLAREd today';
     END IF;
 
-   IF NOT (SELECT fever FROM Health_declarations WHERE Health_declarations.eid = _eid AND hdate = now()::date) THEN
+    IF NOT (SELECT fever FROM Health_declarations WHERE Health_declarations.eid = _eid AND hdate = now()::date) THEN
         RAISE NOTICE 'The employee does not have fever today.';
         RETURN;
     END IF;
@@ -1179,10 +1179,10 @@ BEGIN
         SELECT e.eid AS EmployeeID, CASE 
             -- the employee resigned between start date and end date.
             WHEN e.resigned_date IS NOT NULL AND e.resigned_date > sdate AND e.resigned_date < edate THEN 
-                (((edate - resigned_date) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) AS int))
+                (((edate - resigned_date) + 1) - CAST((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) AS int))
             -- the employee do not resign or will resign after end date.
             ELSE 
-                (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) AS int))
+                (((edate - sdate) + 1) - CAST((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) AS int))
         END AS NumberOfDays
         FROM Employees e
             -- The employee do not resign or will resign after end date.
