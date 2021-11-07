@@ -349,6 +349,7 @@ insert into Health_declarations(eid, hdate, htemp, fever) values (23, '2021-11-0
 insert into Health_declarations(eid, hdate, htemp, fever) values (23, '2021-10-31', '35.6', FALSE);
 insert into Health_declarations(eid, hdate, htemp, fever) values (23, '2021-10-30', '36.3', FALSE);
 insert into Health_declarations(eid, hdate, htemp, fever) values (23, '2021-10-29', '35.5', FALSE);
+insert into Health_declarations(eid, hdate, htemp, fever) values (7, '2021-11-07', '40.0', TRUE);
 
 --Meeting_Rooms
 insert into Meeting_Rooms(room, mfloor, rname, did) values (1, 1, 'Room_Rjpqvvfs', 1);
@@ -401,6 +402,7 @@ insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (
 insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (10, 10, '17:00', '2021-11-04', 20, NULL);
 insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (10, 10, '18:00', '2021-11-10', 20, NULL);
 insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (8, 8, '18:00', '2021-11-10', 18, 28);
+insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (6, 6, '18:00', '2021-11-04', 16, 26);
 
 --Joins
 insert into Joins(eid, room, jfloor, jtime, jdate) values (19, 9, 9, '12:00', '2021-12-05');
@@ -456,3 +458,22 @@ insert into Joins(eid, room, jfloor, jtime, jdate) values (23, 10, 10, '18:00', 
 insert into Joins(eid, room, jfloor, jtime, jdate) values (18, 8, 8, '18:00', '2021-11-10');
 insert into Joins(eid, room, jfloor, jtime, jdate) values (21, 8, 8, '18:00', '2021-11-10');
 
+insert into Joins(eid, room, jfloor, jtime, jdate) values (16, 6, 6, '18:00', '2021-11-04');
+insert into Joins(eid, room, jfloor, jtime, jdate) values (6, 6, 6, '18:00', '2021-11-04');
+insert into Joins(eid, room, jfloor, jtime, jdate) values (7, 6, 6, '18:00', '2021-11-04');
+
+--Close_Contacts
+insert into Close_Contacts(eid, affect_date) values(16, '2021-11-08');
+insert into Close_Contacts(eid, affect_date) values(16, '2021-11-09');
+insert into Close_Contacts(eid, affect_date) values(16, '2021-11-10');
+insert into Close_Contacts(eid, affect_date) values(16, '2021-11-11');
+insert into Close_Contacts(eid, affect_date) values(16, '2021-11-12');
+insert into Close_Contacts(eid, affect_date) values(16, '2021-11-13');
+insert into Close_Contacts(eid, affect_date) values(16, '2021-11-14');
+insert into Close_Contacts(eid, affect_date) values(6, '2021-11-08');
+insert into Close_Contacts(eid, affect_date) values(6, '2021-11-09');
+insert into Close_Contacts(eid, affect_date) values(6, '2021-11-10');
+insert into Close_Contacts(eid, affect_date) values(6, '2021-11-11');
+insert into Close_Contacts(eid, affect_date) values(6, '2021-11-12');
+insert into Close_Contacts(eid, affect_date) values(6, '2021-11-13');
+insert into Close_Contacts(eid, affect_date) values(6, '2021-11-14');
