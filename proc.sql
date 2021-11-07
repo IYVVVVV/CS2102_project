@@ -410,6 +410,9 @@ $$ language plpgsql;
 CREATE OR REPLACE FUNCTION search_room (_capacity INTEGER, _date DATE, _start_hour TIME, _end_hour TIME)
 RETURNS TABLE(room_number INTEGER, floor_number INTEGER, department_id INTEGER, capacity INTEGER) AS $$
 BEGIN
+	IF _date < now()::date THEN
+		RAISE EXCEPTION 'Search failed. Only current or future search is available.';
+	END IF;
 	RETURN QUERY
 	With max_cap_update as (
 		select u1.room as room, u1.ufloor as ufloor, u1.new_cap
