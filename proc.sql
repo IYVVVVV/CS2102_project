@@ -860,10 +860,10 @@ BEGIN
     END IF;
 
     RETURN QUERY
-        SELECT e.eid AS EmployeeID, (((edate - sdate) + 1) - (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid)) AS NumberOfDays
+        SELECT e.eid AS EmployeeID, (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int))
         FROM Employees e
         WHERE (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - sdate)+1)
-        ORDER BY (((edate - sdate) + 1) -  (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid)) DESC;
+        ORDER BY (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int)) DESC;
 END;
 $$ LANGUAGE plpgsql;
 
