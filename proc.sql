@@ -317,6 +317,42 @@ end;
 $$ language plpgsql;
 
 
+-- trigger such that affected sessions and joins will be removed
+create or replace function f_check_remove_employee_affected_sessions()
+returns trigger as $$
+declare
+    session_to_remove record;
+begin
+    -- check the update is to resign an employee
+    if NEW.resigned_date = OLD.resigned_date then
+        return NULL;
+    end if;
+
+    -- remove his future booking session ans all joins
+    -- remove joins first
+    FOR session_to_remove IN SELECT * FROM Sessions WHERE Sessions.booker_id=NEW.eid and Sessions.sdate > NEW.resigned_date
+    LOOP
+        delete from Joins as j where j.room = session_to_remove.room and j.jfloor = session_to_remove.sfloor 
+                                and j.jtime = session_to_remove.stime and j.jdate = session_to_remove.sdate;
+    END LOOP;
+    -- remove sessions then
+    delete from Sessions where Sessions.booker_id = NEW.eid and Sessions.sdate > NEW.resigned_date;
+
+    --remove his future joins
+    delete from Joins where Joins.eid = NEW.eid and Joins.jdate > NEW.resigned_date;
+
+    --rollback approval for future meetings if eid is the manager who approved the meeting
+    update Sessions set manager_id = NULL where manager_id = NEW.eid and Sessions.sdate > NEW.resigned_date;
+    return NULL;
+end;
+$$ LANGUAGE plpgsql;
+
+create trigger check_remove_employee_affected_sessions
+after update on Employees
+for each row
+execute function f_check_remove_employee_affected_sessions();
+
+
 /* 
  * Basic_6: remove a employee
  * input: eid, date
@@ -345,21 +381,21 @@ begin
     update Employees set resigned_date = _resigned_date where eid = _eid;
     update Employees set did = NULL where eid = _eid;
     
-    -- remove his future booking session ans all joins
-    -- remove joins first
-    FOR session_to_remove IN SELECT * FROM Sessions WHERE Sessions.booker_id=_eid and Sessions.sdate > _resigned_date
-    LOOP
-        delete from Joins as j where j.room = session_to_remove.room and j.jfloor = session_to_remove.sfloor 
-                                and j.jtime = session_to_remove.stime and j.jdate = session_to_remove.sdate;
-    END LOOP;
-    -- remove sessions then
-    delete from Sessions where Sessions.booker_id = _eid and Sessions.sdate > _resigned_date;
+    -- -- remove his future booking session ans all joins
+    -- -- remove joins first
+    -- FOR session_to_remove IN SELECT * FROM Sessions WHERE Sessions.booker_id=_eid and Sessions.sdate > _resigned_date
+    -- LOOP
+    --     delete from Joins as j where j.room = session_to_remove.room and j.jfloor = session_to_remove.sfloor 
+    --                             and j.jtime = session_to_remove.stime and j.jdate = session_to_remove.sdate;
+    -- END LOOP;
+    -- -- remove sessions then
+    -- delete from Sessions where Sessions.booker_id = _eid and Sessions.sdate > _resigned_date;
 
-    --remove his future joins
-    delete from Joins where Joins.eid = _eid and Joins.jdate > _resigned_date;
+    -- --remove his future joins
+    -- delete from Joins where Joins.eid = _eid and Joins.jdate > _resigned_date;
 
-    --rollback approval for future meetings if eid is the manager who approved the meeting
-    update Sessions set manager_id = NULL where manager_id = _eid and Sessions.sdate > _resigned_date;
+    -- --rollback approval for future meetings if eid is the manager who approved the meeting
+    -- update Sessions set manager_id = NULL where manager_id = _eid and Sessions.sdate > _resigned_date;
     return 0;
 
 end;
