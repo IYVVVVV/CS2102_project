@@ -472,9 +472,9 @@ CREATE OR REPLACE PROCEDURE JoinMeeting (IN floor_number INT, IN room_number INT
 DECLARE 
     temp TIME := start_hour;
     each_hour TIME[];
-	var_hour TIME;
-	start_hour_ok INTEGER := 0;
-	end_hour_ok INTEGER := 0;
+    var_hour TIME;
+    start_hour_ok INTEGER := 0;
+    end_hour_ok INTEGER := 0;
     existing_eid INT;
     resigned DATE;
     fever_id INT;
