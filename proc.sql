@@ -30,6 +30,31 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+
+-- trigger such that only department with no current employees and no rooms can be deleted
+create or replace function f_check_department_deletion_condition()
+returns trigger as $$
+declare 
+    emps record;
+begin
+    FOR emps IN SELECT * FROM Employees WHERE Employees.did=OLD.did LOOP
+        IF not is_resigned(emps.eid) THEN
+            RAISE exception 'Remove failed. Some employees in this department % is not removed yet', _did;
+        END IF;
+    END LOOP;
+    IF (SELECT count(*) FROM Meeting_Rooms WHERE Meeting_Rooms.did=_did ) <> 0 THEN
+        RAISE exception 'Remove failed. Delete all meeting rooms inside department % before deleting the department!', _did;
+    END IF;
+    return OLD;
+end;
+$$ LANGUAGE plpgsql;
+
+create trigger check_department_deletion_condition
+before delete on Departments
+for each row
+execute function f_check_department_deletion_condition();
+
+
 /* 
  * Basic_1: add a new department
  * input: 
@@ -66,16 +91,6 @@ begin
     if current_did is NULL then
         raise exception 'Remove failed. There is no department with such id.';
     end if;
-
-	FOR emps IN SELECT * FROM Employees WHERE Employees.did=_did LOOP
-		IF is_resigned(emps.eid) THEN
-			RAISE 'Remove failed. Some employees in this department % is not removed yet', _did;
-		END IF;
-	END LOOP;
-    IF (SELECT count(*) FROM Meeting_Rooms WHERE Meeting_Rooms.did=_did ) <> 0 THEN
-        RAISE 'Remove failed. Delete all meeting rooms inside department % before deleting the department!', _did;
-    END IF;
-
     DELETE FROM Departments WHERE Departments.did = _did;
     return 0;
 end;
@@ -111,30 +126,6 @@ BEGIN
 	RETURN 0;
 END	
 $$ LANGUAGE plpgsql;
-
-
--- trigger such that if no one joins a session in Joins, the session is removed from Sessions table
--- create or replace function f_check_someone_joins_session()
--- returns trigger as $$
--- declare
---     num_participant INT;
--- begin
---     select count(*) into num_participant
---     from Joins as j
---     where j.room = OLD.room and j.jfloor = OLD.jfloor
---         and j.jtime = OLD.jtime and j.jdate = OLD.jdate;
---     if num_participant = 0 then
---         delete from Sessions where Sessions.room = OLD.room and Sessions.sfloor = OLD.jfloor
---                                 and Sessions.stime = OLD.jtime and Sessions.sdate = OLD.jdate;
---     end if;
---     return NULL;
--- end;
--- $$ LANGUAGE plpgsql;
-
--- create trigger check_someone_joins_session
--- after delete on Joins
--- for each row
--- execute function f_check_someone_joins_session();
 
 
 /* 
@@ -276,6 +267,7 @@ begin
     end if;
         
     update Employees set resigned_date = _resigned_date where eid = _eid;
+    update Employees set did = NULL where eid = _eid;
     
     -- remove his future booking session ans all joins
     -- remove joins first
@@ -534,7 +526,11 @@ BEGIN
     END IF; 
 	
     -- *check whether the employee has close contact in the last 7 days
-
+    SELECT COUNT(*) INTO close_contact FROM Close_Contacts WHERE eid = id AND affect_date = meeting_date;
+    IF close_contact <> 0 THEN
+        raise exception 'Join failed. The employee had a close contact with someone having a fever.';
+    END IF;
+    
     -- Join
     WHILE temp < end_hour LOOP
         -- check whether the session exists
@@ -607,12 +603,12 @@ BEGIN
 		END IF;
 	END LOOP;
 	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
-		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
+		RAISE EXCEPTION	'Leave failed. The input start hour or end hour must be full hour.';
 	END IF;
 
     -- check whether start time is before after time
     IF start_hour > end_hour THEN
-    raise exception 'Leave failed because start time is after end time.';
+    raise exception 'Leave failed. Start time is after end time.';
     END IF;
 	
     -- check whether the employee with eid exists
@@ -909,12 +905,45 @@ BEGIN
     END IF;
 
     RETURN QUERY
-        SELECT e.eid AS EmployeeID, (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int))
+        SELECT e.eid AS EmployeeID, CASE 
+            -- the employee resigned between start date and end date.
+            WHEN e.resigned_date IS NOT NULL AND e.resigned_date > sdate AND e.resigned_date < edate THEN 
+                (((edate - resigned_date) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int))
+            -- the employee do not resign or will resign after end date.
+            ELSE 
+                (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int))
+        END AS NumberOfDays
         FROM Employees e
-        WHERE (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - sdate)+1)
-        ORDER BY (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int)) DESC;
+            -- The employee do not resign or will resign after end date.
+        WHERE (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - sdate)+1) 
+            -- For the employee who will resign before end date and after start date, the number of health declarations should equal to the number of dates from start date to resign date
+            AND (e.resigned_date IS NULL 
+                OR (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - e.resigned_date)+1) )
+            -- The employee resigned before the start date. Then no need to check the compliance of health declaration
+            AND (e.resigned_date IS NULL OR e.resigned_date > sdate)
+            AND (SELECT COUNT(*) FROM Employees e2 WHERE e2.eid = e.eid AND resigned_date IS NOT NULL AND resigned_date < sdate) = 0 
+        ORDER BY NumberOfDays DESC;
 END;
 $$ LANGUAGE plpgsql;
+-- Can try importing the following function(version without consideration of resigned_date) and run the valid test sentence in test.sql to see difference.
+-- CREATE OR REPLACE FUNCTION NonCompliance (IN sdate DATE, IN edate DATE)
+-- RETURNS TABLE(EmployeeID INT, NumberOfDays INT) AS $$
+-- BEGIN 
+--     IF sdate > edate THEN
+--         raise exception 'Compliance tracing failed. The start date is after end date.';
+--     END IF;
+    
+--     IF edate > now()::date THEN
+--         raise exception 'Compliance tracing failed. The end date is in the future.';
+--     END IF;
+
+--     RETURN QUERY
+--         SELECT e.eid AS EmployeeID, (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int))
+--         FROM Employees e
+--         WHERE (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - sdate)+1)
+--         ORDER BY (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int)) DESC;
+-- END;
+-- $$ LANGUAGE plpgsql;
 
 
 /* 
