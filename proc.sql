@@ -864,11 +864,11 @@ BEGIN
         SELECT e.eid AS EmployeeID, CASE 
             -- the employee resigned between start date and end date.
             WHEN e.resigned_date IS NOT NULL AND e.resigned_date > sdate AND e.resigned_date < edate THEN 
-                (((edate - resigned_date) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int)) 
+                (((edate - resigned_date) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int))
             -- the employee do not resign or will resign after end date.
             ELSE 
-                (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int)) 
-        END 
+                (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int))
+        END AS NumberOfDays
         FROM Employees e
             -- The employee do not resign or will resign after end date.
         WHERE (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - sdate)+1) 
@@ -878,7 +878,7 @@ BEGIN
             -- The employee resigned before the start date. Then no need to check the compliance of health declaration
             AND (e.resigned_date IS NULL OR e.resigned_date > sdate)
             AND (SELECT COUNT(*) FROM Employees e2 WHERE e2.eid = e.eid AND resigned_date IS NOT NULL AND resigned_date < sdate) = 0 
-        ORDER BY (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int)) DESC;
+        ORDER BY NumberOfDays DESC;
 END;
 $$ LANGUAGE plpgsql;
 -- Can try importing the following function(version without consideration of resigned_date) and run the valid test sentence in test.sql to see difference.
