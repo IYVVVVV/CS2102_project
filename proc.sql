@@ -676,18 +676,18 @@ BEGIN
 		RAISE 'The given room % in % floor does not exist!', room_num, floor_num;
 	END IF;
 
-    SELECT count(booker_id) INTO booker_count FROM Sessions 
-    WHERE sfloor= floor_num AND room=room_num AND stime>=start_hour AND stime<end_hour AND sdate=date;
-    IF count<>1 THEN
+    SELECT  count( DISTINCT booker_id) INTO booker_count FROM Sessions 
+    WHERE sfloor= floor_num AND room=room_num AND stime>=start_hour AND stime< end_hour AND sdate=date;
+    IF booker_count>1 THEN
         RAISE 'The time range is not booked by a single employee';
     END IF;
 
-    IF mng_did<>expect_eid THEN
+    IF mng_did<>expect_did THEN
         RAISE 'The given manager % is not in charge of this room', approve_eid;
     END IF;
 
     WHILE temp< end_hour LOOP  
-        SELECT booker_id INTO bid FROM Sessions WHERE room=room_num AND sfloor=floor_num AND stime=temp AND sdate=date;
+        SELECT booker_id INTO bid FROM Sessions WHERE room=room_num AND sfloor=floor_num AND stime=temp AND sdate=date AND approve_eid IS NOT NULL;
         IF bid IS NOT NULL THEN
             RAISE 'The room % in floor % is already booked at time % and date %', room_num, floor_num, temp, date;
         END IF;
@@ -698,7 +698,7 @@ BEGIN
         temp:=start_hour;
         WHILE temp <end_hour LOOP
             INSERT INTO Sessions VALUES (room_num, floor_num, temp, date, booker_eid, approve_eid)
-            ON CONFLICT(room_num, floor_num, temp, date) DO UPDATE SET manager_id=approve_id;
+            ON CONFLICT(room, sfloor, stime, sdate) DO UPDATE SET manager_id=approve_eid;
             temp:= temp +'1 hour';
         END LOOP;
 	ELSE    
@@ -710,11 +710,14 @@ BEGIN
         temp:=start_hour;
         WHILE temp<end_hour LOOP
             DELETE FROM Sessions WHERE room=room_num AND sfloor=floor_num AND sdate=date AND stime=temp;
+            temp:= temp +'1 hour';
         END LOOP;
     END IF;
     return 0;
 END;
 $$ LANGUAGE plpgsql;
+
+
 
 /* 
  * Health_1: used for daily declaration of temperature
@@ -751,7 +754,7 @@ $$ LANGUAGE plpgsql;
  * by default, we assume the date is today, and today's meeting
  */
 CREATE OR REPLACE FUNCTION contact_tracing (IN _eid INT)
-RETURNS TABLE (eid INT)
+RETURNS TABLE (close_contact_eid INT)
 AS $$
 declare
     current_eid int;
@@ -810,7 +813,10 @@ begin
         _affected_date = now()::date + 1;
         WHILE _affected_date <= now()::date + 7 LOOP
             -- check primary key constraint before insert
-            INSERT INTO Close_Contacts(eid, affected_date) VALUES (close_contact_eid, _affected_date);
+            if not exists (select * from Close_Contacts 
+                where Close_Contacts.eid = close_contact_eid and Close_Contacts.affect_date = _affected_date) then
+                INSERT INTO Close_Contacts(eid, affect_date) VALUES (close_contact_eid, _affected_date);
+            end if;
             _affected_date := _affected_date + 1;
         END LOOP;
     -- remove their future bookings and other's join (D+1 to D+7)
@@ -829,7 +835,7 @@ begin
     END LOOP;
 
     return query 
-        select jo.eid
+        select jo.eid as close_contact_eid
         from Sessions as ss, Joins as jo
         where ss.manager_id is not NULL and jo.eid <> _eid
             and ss.sdate <= now()::date and ss.sdate >= (now():: date - 3)
@@ -847,7 +853,24 @@ $$LANGUAGE plpgsql;
  * input: 
  * output:
  */
---create or replace function non_compliance
+CREATE OR REPLACE FUNCTION NonCompliance (IN sdate DATE, IN edate DATE)
+RETURNS TABLE(EmployeeID INT, NumberOfDays INT) AS $$
+BEGIN 
+    IF sdate > edate THEN
+        raise exception 'Compliance tracing failed. The start date is after end date.';
+    END IF;
+    
+    IF edate > now()::date THEN
+        raise exception 'Compliance tracing failed. The end date is in the future.';
+    END IF;
+
+    RETURN QUERY
+        SELECT e.eid AS EmployeeID, (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int))
+        FROM Employees e
+        WHERE (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - sdate)+1)
+        ORDER BY (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int)) DESC;
+END;
+$$ LANGUAGE plpgsql;
 
 
 /* 

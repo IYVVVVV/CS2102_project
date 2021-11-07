@@ -397,7 +397,10 @@ insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (
 insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (10, 10, '16:00', '2021-12-05', 20, NULL);
 insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (10, 10, '17:00', '2021-12-05', 20, NULL);
 insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (10, 10, '18:00', '2021-12-05', 20, NULL);
-insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (10, 10, '18:00', '2021-11-04', 20, NULL);
+insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (10, 10, '18:00', '2021-11-04', 20, 30);
+insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (10, 10, '17:00', '2021-11-04', 20, NULL);
+insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (10, 10, '18:00', '2021-11-10', 20, NULL);
+insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (8, 8, '18:00', '2021-11-10', 18, 28);
 
 --Joins
 insert into Joins(eid, room, jfloor, jtime, jdate) values (19, 9, 9, '12:00', '2021-12-05');
@@ -436,4 +439,20 @@ insert into Joins(eid, room, jfloor, jtime, jdate) values (6, 10, 10, '15:00', '
 insert into Joins(eid, room, jfloor, jtime, jdate) values (6, 10, 10, '16:00', '2021-12-05');
 insert into Joins(eid, room, jfloor, jtime, jdate) values (6, 10, 10, '17:00', '2021-12-05');
 insert into Joins(eid, room, jfloor, jtime, jdate) values (6, 10, 10, '18:00', '2021-12-05');
+insert into Joins(eid, room, jfloor, jtime, jdate) values (19, 10, 10, '18:00', '2021-12-05');
+
+insert into Joins(eid, room, jfloor, jtime, jdate) values (20, 10, 10, '17:00', '2021-11-04');
+insert into Joins(eid, room, jfloor, jtime, jdate) values (19, 10, 10, '17:00', '2021-11-04');
+insert into Joins(eid, room, jfloor, jtime, jdate) values (17, 10, 10, '17:00', '2021-11-04');
+
 insert into Joins(eid, room, jfloor, jtime, jdate) values (20, 10, 10, '18:00', '2021-11-04');
+insert into Joins(eid, room, jfloor, jtime, jdate) values (19, 10, 10, '18:00', '2021-11-04');
+insert into Joins(eid, room, jfloor, jtime, jdate) values (21, 10, 10, '18:00', '2021-11-04');
+
+insert into Joins(eid, room, jfloor, jtime, jdate) values (20, 10, 10, '18:00', '2021-11-10');
+insert into Joins(eid, room, jfloor, jtime, jdate) values (22, 10, 10, '18:00', '2021-11-10');
+insert into Joins(eid, room, jfloor, jtime, jdate) values (23, 10, 10, '18:00', '2021-11-10');
+
+insert into Joins(eid, room, jfloor, jtime, jdate) values (18, 8, 8, '18:00', '2021-11-10');
+insert into Joins(eid, room, jfloor, jtime, jdate) values (21, 8, 8, '18:00', '2021-11-10');
+
