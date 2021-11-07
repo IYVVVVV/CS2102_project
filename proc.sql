@@ -731,7 +731,7 @@ DECLARE
     capacity INT :=0;
     number_participants INT :=0;
 BEGIN
-    SELECT new_cap INTO capacity FROM Updates WHERE room = New.room AND ufloor = New.jfloor AND udate = (SELECT MAX(udate) FROM Updates WHERE room = New.room AND ufloor = New.jfloor AND udate < New.jdate);
+    SELECT new_cap INTO capacity FROM Updates WHERE room = New.room AND ufloor = New.jfloor AND udate = (SELECT udate FROM Updates WHERE room = New.room AND ufloor = New.jfloor AND udate < New.jdate AND udate = (SELECT MAX(udate) FROM Updates WHERE room = NEW.room AND ufloor = New.jfloor));
     SELECT COUNT(*) INTO number_participants FROM Joins WHERE room = New.room AND jfloor = New.jfloor AND jtime = New.jtime AND jdate = New.jdate;
     IF number_participants < capacity THEN
         RETURN NEW;
