@@ -462,61 +462,92 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE PROCEDURE JoinMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour TIME, IN end_hour TIME, IN id INT) AS $$
 DECLARE 
     temp TIME := start_hour;
-    current_eid INT;
-    meeting_room INT;
+    each_hour TIME[];
+	var_hour TIME;
+	start_hour_ok INTEGER := 0;
+	end_hour_ok INTEGER := 0;
+    existing_eid INT;
     resigned DATE;
     fever_id INT;
+    existing_room INT;
+    session_eid INT;
     joined_id INT; 
-	approver_id INT;
-	booker_eid INT;
+    meeting_room INT;
+    capacity INT :=0;
+    number_participants INT :=0;
 BEGIN
+    -- check whether start and end hour are full hour
+	each_hour := '{00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00,
+                  07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 
+                  13:00, 14:00, 15:00, 16:00, 17:00, 18:00,
+                  19:00, 20:00, 21:00, 22:00, 23:00, 24:00}'::TIME[];
+	FOREACH var_hour IN ARRAY each_hour LOOP
+		IF var_hour = start_hour THEN
+			start_hour_ok := 1;
+		END IF;
+		IF var_hour = end_hour THEN
+			end_hour_ok := 1;
+		END IF;
+	END LOOP;
+	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
+		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
+	END IF;
+    -- check whether start time is before end time
     IF start_hour > end_hour THEN
-    raise exception 'Join failed because start time is after end time.';
+        raise exception 'Join failed because start time is after end time.';
     END IF;
-    
-    SELECT eid INTO current_eid FROM Employees WHERE eid = id;
-    IF current_eid IS NULL THEN
+    -- check whether the employee with eid exists
+    SELECT eid INTO existing_eid FROM Employees WHERE eid = id;
+    IF existing_eid IS NULL THEN
         raise exception 'Join Failed. There is no employee with such id.';
-    ELSE
-		/*-- check the session specified exists
-		WHILE temp < end_hour LOOP
-			SELECT s.booker_id INTO booker_eid FROM Sessions s WHERE s.room = room_number AND s.sfloor = floor_number AND s.sdate = meeting_date AND s.stime = temp;
-			IF booker_eid IS NULL THEN 
-				RAISE EXCEPTION 'The session does not exist';
-			END IF;
-			temp := temp + '1 hour';
-		END LOOP;
-		
-		-- check approver is NULL
-        SELECT room INTO meeting_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL;
-        IF meeting_room IS NULL THEN
-            raise exception 'Join failed. The meeting has been approved already.';
-        END IF;*/
+    END IF;
+    -- check whether the employee has resigned
+    SELECT resigned_date INTO resigned FROM Employees WHERE eid = id;
+    IF resigned IS NOT NULL AND meeting_date > resigned THEN
+        raise exception 'Join failed. The employee has resigned.';
+    END IF;
+    -- check whether the employee has a fever on the meeting date
+    SELECT h.eid INTO fever_id FROM Health_declarations h WHERE h.eid = id AND h.hdate = meeting_date AND fever = true;
+    IF fever_id IS NOT NULL THEN
+        raise exception 'Join failed. The employee has a fever on the meeting date.';
+    END IF; 
+    -- *check whether the employee has close contact in the last 7 days
 
-
-        SELECT resigned_date INTO resigned FROM Employees WHERE eid = id;
-        IF resigned IS NOT NULL AND meeting_date > resigned THEN
-            raise exception 'Join failed. The employee has resigned.';
+    -- Join
+    WHILE temp < end_hour LOOP
+        -- check whether the session exists
+        SELECT room INTO existing_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date;
+        IF existing_room IS NULL THEN 
+            raise exception 'Join failed. There is no session held at given time, date, room, floor.';
         END IF;
-
-
-        SELECT h.eid INTO fever_id FROM Health_declarations h WHERE h.eid = id and fever = true;
-        IF fever_id IS NOT NULL THEN
-            raise exception 'Join failed. The employee has a fever.';
-        END IF;
-            
+        -- check whether the employee has joined any session among the time period already
         SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
         IF joined_id IS NOT NULL THEN
-            raise exception 'Join failed. The employee has already joined the meeting';
+            raise exception 'Join failed. The time period contains some sessions that employee has already joined';
         END IF;
-
-        WHILE temp < end_hour LOOP
-            INSERT INTO Joins VALUES (id, room_number, floor_number, temp, meeting_date);
-            temp := temp + '1 hour';
-        END LOOP;
-    END IF;
+        -- check an employee cannot join several sessions at the same time
+        SELECT eid INTO session_eid FROM Joins WHERE eid = id AND jtime = temp AND jdate = meeting_date;
+        IF session_eid IS NOT NULL THEN
+            raise exception 'Join failed. The employee has joined another session held at the same time and date.';
+        END IF;
+        -- check whether all the seesions have been approved
+        SELECT room INTO meeting_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL;
+        IF meeting_room IS NULL THEN
+            raise exception 'Join failed. The time period contains some sessions that has been approved already.';
+        END IF;
+        -- check if exceede the capacity limits.
+        SELECT new_cap INTO capacity FROM Updates WHERE room = meeting_room AND ufloor = floor_number AND udate = (SELECT MAX(udate) FROM Updates WHERE room = meeting_room AND ufloor = floor_number AND udate < meeting_date);
+        SELECT COUNT(*) INTO number_participants FROM Joins WHERE room = meeting_room AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
+        IF number_participants >= capacity THEN
+            raise exception 'Join failed. The number of participants has reached the capacity limit of the room';
+        END IF;
+        -- Insert into Joins
+        INSERT INTO Joins VALUES (id, room_number, floor_number, temp, meeting_date);
+        temp := temp + '1 hour';
+    END LOOP;
 END;
 $$ LANGUAGE plpgsql;
+
 
 /* 
  * Core_5: leave a booked meeting room
@@ -526,36 +557,64 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE PROCEDURE LeaveMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour TIME, IN end_hour TIME, IN id INT) AS $$
 DECLARE 
     temp TIME := start_hour;
+    each_hour TIME[];
+	var_hour TIME;
+	start_hour_ok INTEGER := 0;
+	end_hour_ok INTEGER := 0;
     current_eid INT;
+    existing_room INT;
     meeting_room INT;
     joined_id INT; 
 BEGIN
+    -- check whether start and end hour are full hour
+	each_hour := '{00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00,
+                  07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 
+                  13:00, 14:00, 15:00, 16:00, 17:00, 18:00,
+                  19:00, 20:00, 21:00, 22:00, 23:00, 24:00}'::TIME[];
+	FOREACH var_hour IN ARRAY each_hour LOOP
+		IF var_hour = start_hour THEN
+			start_hour_ok := 1;
+		END IF;
+		IF var_hour = end_hour THEN
+			end_hour_ok := 1;
+		END IF;
+	END LOOP;
+	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
+		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
+	END IF;
+
+    -- check whether start time is before after time
     IF start_hour > end_hour THEN
     raise exception 'Leave failed because start time is after end time.';
     END IF;
-    
+    -- check whether the employee with eid exists
     SELECT eid INTO current_eid FROM Employees WHERE eid = id;
     IF current_eid IS NULL THEN
         raise exception 'Leave Failed. There is no employee with such id.';
-    ELSE
+    END IF;
+    -- Leave
+    WHILE temp < end_hour LOOP
+        -- check whether the session exists
+        SELECT room INTO existing_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date;
+        IF existing_room IS NULL THEN 
+            raise exception 'Join failed. There is no session held at given time, date, room, floor.';
+        END IF;
+        -- check whether the session has been approved
         SELECT room INTO meeting_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL;
         IF meeting_room IS NULL THEN
             raise exception 'Leave failed. The meeting has been approved already.';
         END IF;
-
+        -- check whether the employee has left the meeting or did not join
         SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
         IF joined_id IS NULL THEN
-            raise exception 'Leave failed. The employee has already leaved the meeting or did not join the meeting';
+            raise exception 'Leave failed. The employee has already left the meeting or did not join the meeting';
         END IF;
-
-        WHILE temp < end_hour LOOP
-            DELETE FROM Joins WHERE eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
-            temp := temp + '1 hour';
-        END LOOP;
-    END IF;
+        -- Delete from Joins
+        DELETE FROM Joins WHERE eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
+        temp := temp + '1 hour';
+    END LOOP;
 END;
 $$ LANGUAGE plpgsql;
-
 
 /* 
  * Core_6: approve a booking
