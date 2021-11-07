@@ -30,6 +30,31 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+
+-- trigger such that only department with no current employees and no rooms can be deleted
+create or replace function f_check_department_deletion_condition()
+returns trigger as $$
+declare 
+    emps record;
+begin
+    FOR emps IN SELECT * FROM Employees WHERE Employees.did=OLD.did LOOP
+        IF not is_resigned(emps.eid) THEN
+            RAISE exception 'Remove failed. Some employees in this department % is not removed yet', _did;
+        END IF;
+    END LOOP;
+    IF (SELECT count(*) FROM Meeting_Rooms WHERE Meeting_Rooms.did=_did ) <> 0 THEN
+        RAISE exception 'Remove failed. Delete all meeting rooms inside department % before deleting the department!', _did;
+    END IF;
+    return OLD;
+end;
+$$ LANGUAGE plpgsql;
+
+create trigger check_department_deletion_condition
+before delete on Departments
+for each row
+execute function f_check_department_deletion_condition();
+
+
 /* 
  * Basic_1: add a new department
  * input: 
@@ -66,16 +91,6 @@ begin
     if current_did is NULL then
         raise exception 'Remove failed. There is no department with such id.';
     end if;
-
-	FOR emps IN SELECT * FROM Employees WHERE Employees.did=_did LOOP
-		IF is_resigned(emps.eid) THEN
-			RAISE 'Remove failed. Some employees in this department % is not removed yet', _did;
-		END IF;
-	END LOOP;
-    IF (SELECT count(*) FROM Meeting_Rooms WHERE Meeting_Rooms.did=_did ) <> 0 THEN
-        RAISE 'Remove failed. Delete all meeting rooms inside department % before deleting the department!', _did;
-    END IF;
-
     DELETE FROM Departments WHERE Departments.did = _did;
     return 0;
 end;
@@ -111,30 +126,6 @@ BEGIN
 	RETURN 0;
 END	
 $$ LANGUAGE plpgsql;
-
-
--- trigger such that if no one joins a session in Joins, the session is removed from Sessions table
--- create or replace function f_check_someone_joins_session()
--- returns trigger as $$
--- declare
---     num_participant INT;
--- begin
---     select count(*) into num_participant
---     from Joins as j
---     where j.room = OLD.room and j.jfloor = OLD.jfloor
---         and j.jtime = OLD.jtime and j.jdate = OLD.jdate;
---     if num_participant = 0 then
---         delete from Sessions where Sessions.room = OLD.room and Sessions.sfloor = OLD.jfloor
---                                 and Sessions.stime = OLD.jtime and Sessions.sdate = OLD.jdate;
---     end if;
---     return NULL;
--- end;
--- $$ LANGUAGE plpgsql;
-
--- create trigger check_someone_joins_session
--- after delete on Joins
--- for each row
--- execute function f_check_someone_joins_session();
 
 
 /* 
@@ -276,6 +267,7 @@ begin
     end if;
         
     update Employees set resigned_date = _resigned_date where eid = _eid;
+    update Employees set did = NULL where eid = _eid;
     
     -- remove his future booking session ans all joins
     -- remove joins first

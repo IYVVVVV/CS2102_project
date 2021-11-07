@@ -14,7 +14,7 @@ CREATE TABLE Employees (
     ename VARCHAR(50) NOT NULL,
     email VARCHAR(50) UNIQUE NOT NULL,
     resigned_date DATE,
-    did INTEGER NOT NULL,
+    did INTEGER,
     PRIMARY KEY(eid),
     FOREIGN KEY(did) REFERENCES Departments(did),
     -- email should be in form 'xxx@yyy.zzz'
