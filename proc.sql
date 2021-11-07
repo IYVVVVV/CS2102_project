@@ -1,4 +1,4 @@
--- trigger such that if no one joins a session in Joins, the session is removed from Sessions table
+-- trigger such that employees can only join future meetings
 create or replace function f_check_join_only_future_meeting()
 returns trigger as $$
 declare
