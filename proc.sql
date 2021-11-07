@@ -559,6 +559,40 @@ before insert or update on Joins
 for each row
 execute function f_check_join_only_future_meeting();
 
+-- trigger checking the time entered is full hour or not
+create or replace function f_check_join_with_full_hour()
+returns trigger as $$
+declare
+    each_hour TIME[];
+    var_hour TIME;
+    start_hour_ok INTEGER := 0;
+    end_hour_ok INTEGER := 0;
+begin
+	each_hour := '{00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00,
+                  07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 
+                  13:00, 14:00, 15:00, 16:00, 17:00, 18:00,
+                  19:00, 20:00, 21:00, 22:00, 23:00, 24:00}'::TIME[];
+	FOREACH var_hour IN ARRAY each_hour LOOP
+		IF var_hour = NEW.start_hour THEN
+			start_hour_ok := 1;
+		END IF;
+		IF var_hour = NEW.end_hour THEN
+			end_hour_ok := 1;
+		END IF;
+	END LOOP;
+	IF start_hour_ok = 1 AND end_hour_ok = 1 THEN
+		return NEW;
+	END IF;
+    	raise exception 'Join failed. Can only join future meetings.';
+    	return NULL;
+end;
+$$ LANGUAGE plpgsql;
+
+create trigger check_join_with_full_hour
+before insert or update on Joins
+for each row
+execute function f_check_join_with_full_hour();
+
 /* 
  * Core_4: join a booked meeting room
  * input: floor_number, room_number, meeting_date, start_hour, end_hour, eid
@@ -567,10 +601,10 @@ execute function f_check_join_only_future_meeting();
 CREATE OR REPLACE PROCEDURE JoinMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour TIME, IN end_hour TIME, IN id INT) AS $$
 DECLARE 
     temp TIME := start_hour;
-    each_hour TIME[];
-    var_hour TIME;
-    start_hour_ok INTEGER := 0;
-    end_hour_ok INTEGER := 0;
+--     each_hour TIME[];
+--     var_hour TIME;
+--     start_hour_ok INTEGER := 0;
+--     end_hour_ok INTEGER := 0;
     existing_eid INT;
     resigned DATE;
     fever_id INT;
@@ -582,22 +616,22 @@ DECLARE
     capacity INT :=0;
     number_participants INT :=0;
 BEGIN
-    -- check whether start and end hour are full hour
-	each_hour := '{00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00,
-                  07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 
-                  13:00, 14:00, 15:00, 16:00, 17:00, 18:00,
-                  19:00, 20:00, 21:00, 22:00, 23:00, 24:00}'::TIME[];
-	FOREACH var_hour IN ARRAY each_hour LOOP
-		IF var_hour = start_hour THEN
-			start_hour_ok := 1;
-		END IF;
-		IF var_hour = end_hour THEN
-			end_hour_ok := 1;
-		END IF;
-	END LOOP;
-	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
-		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
-	END IF;
+--     -- check whether start and end hour are full hour
+-- 	each_hour := '{00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00,
+--                   07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 
+--                   13:00, 14:00, 15:00, 16:00, 17:00, 18:00,
+--                   19:00, 20:00, 21:00, 22:00, 23:00, 24:00}'::TIME[];
+-- 	FOREACH var_hour IN ARRAY each_hour LOOP
+-- 		IF var_hour = start_hour THEN
+-- 			start_hour_ok := 1;
+-- 		END IF;
+-- 		IF var_hour = end_hour THEN
+-- 			end_hour_ok := 1;
+-- 		END IF;
+-- 	END LOOP;
+-- 	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
+-- 		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
+-- 	END IF;
 	
     -- check whether start time is before end time
     IF start_hour > end_hour THEN
