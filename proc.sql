@@ -1173,6 +1173,7 @@ $$LANGUAGE plpgsql;
 
 /* 
  * Admin_1: find all employees that do not comply with the daily health declaration 
+ * for resigned employee, we only consider their declaration and non-compliance date before they resigned.
  * input: 
  * output:
  */
@@ -1180,35 +1181,32 @@ CREATE OR REPLACE FUNCTION NonCompliance (IN sdate DATE, IN edate DATE)
 RETURNS TABLE(EmployeeID INT, NumberOfDays INT) AS $$
 BEGIN 
     IF sdate > edate THEN
-        RAISE EXCEPTION 'Compliance tracing failed. The start date is after end date.';
+        raise exception 'Compliance tracing failed. The start date is after end date.';
     END IF;
     
     IF edate > now()::date THEN
-        RAISE EXCEPTION 'Compliance tracing failed. The end date is in the future.';
+        raise exception 'Compliance tracing failed. The end date is in the future.';
     END IF;
 
     RETURN QUERY
         SELECT e.eid AS EmployeeID, CASE 
             -- the employee resigned between start date and end date.
             WHEN e.resigned_date IS NOT NULL AND e.resigned_date > sdate AND e.resigned_date < edate THEN 
-                (((edate - resigned_date) + 1) - CAST((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) AS int))
+                (((resigned_date - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid AND h.hdate <= edate AND h.hdate >= sdate ) as int))
             -- the employee do not resign or will resign after end date.
             ELSE 
-                (((edate - sdate) + 1) - CAST((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) AS int))
+                (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid AND h.hdate <= edate AND h.hdate >= sdate ) as int))
         END AS NumberOfDays
         FROM Employees e
             -- The employee do not resign or will resign after end date.
-        WHERE (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - sdate)+1) 
-            -- For the employee who will resign before end date and after start date, the number of health declarations should equal to the number of dates FROM start date to resign date
-            AND (e.resigned_date IS NULL 
-                OR (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - e.resigned_date)+1) )
-            -- The employee resigned before the start date. Then no need to check the compliance of health declaration
-            AND (e.resigned_date IS NULL OR e.resigned_date > sdate)
-            AND (SELECT COUNT(*) FROM Employees e2 WHERE e2.eid = e.eid AND resigned_date IS NOT NULL AND resigned_date < sdate) = 0 
+        WHERE (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid AND h.hdate <= edate AND h.hdate >= sdate ) <> ((edate - sdate)+1)
+                AND (e.resigned_date IS NULL OR e.resigned_date > edate)
+            -- For the employee who resign before end date and after start date, the number of health declarations should equal to the number of dates from start date to resign date
+            OR (e.resigned_date IS NOT NULL AND e.resigned_date >= sdate AND e.resigned_date <= edate
+                AND (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid AND h.hdate <= edate AND h.hdate >= sdate ) <> ((e.resigned_date - sdate)+1) )
         ORDER BY NumberOfDays DESC;
 END;
 $$ LANGUAGE plpgsql;
-
 
 /* 
  * Admin_2: used by employee to find all meeting rooms that are booked by the employee
