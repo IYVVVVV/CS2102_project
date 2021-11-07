@@ -1,5 +1,5 @@
 DROP TABLE IF EXISTS
-    Employees, Contacts, Health_declarations, Departments, Meeting_Rooms, Updates, Juniors, Bookers, Seniors, Managers, Sessions, Joins;
+    Close_Contacts, Employees, Contacts, Health_declarations, Departments, Meeting_Rooms, Updates, Juniors, Bookers, Seniors, Managers, Sessions, Joins;
 
 -- department
 CREATE TABLE Departments (
