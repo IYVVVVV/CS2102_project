@@ -629,12 +629,16 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE function approve_meeting (IN floor_num INT, room_num INT, IN date DATE, IN start_hour TIME, IN end_hour TIME, IN booker_eid INT, IN approve_eid INT, IN isApproved BOOLEAN) 
 RETURNS INT AS $$
 DECLARE 
-	mng_did INT; expect_did INT; rdate DATE; temp TIME :=start_hour ; booker_count INT; bid INT;
+	meid INT; mng_did INT; expect_did INT; rdate DATE; temp TIME :=start_hour ; booker_count INT; bid INT;
 BEGIN
-	SELECT did INTO mng_did FROM Managers WHERE eid=approve_eid;
-	IF mng_did IS NULL THEN
+    SELECT eid INTO meid From Managers WHERE eid=approve_eid;
+    IF meid IS NULL THEN
 		RAISE 'The given eid % is not a manager!', approve_eid;
 	END IF;
+
+
+	SELECT did INTO mng_did FROM Employees WHERE eid=approve_eid;
+	
 	
 	IF is_resigned(approve_eid) THEN 
         RAISE 'Manager % is resigned!', approve_eid;
