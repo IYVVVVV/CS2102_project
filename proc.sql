@@ -116,7 +116,7 @@ declare
     room_did INT;
 begin
     -- check manager is in the department
-    SELECT did INTO room_did FROM Meeting_Rooms r WHERE r.room = NEW.room AND r.mfloor = NEW.floor;
+    SELECT did INTO room_did FROM Meeting_Rooms r WHERE r.room = NEW.room AND r.mfloor = NEW.ufloor;
     SELECT did INTO manager_did FROM Managers NATURAL JOIN Employees WHERE eid = NEW.manager_id;
     IF (room_did <> manager_did) THEN
         RAISE EXCEPTION 'Manager from different department cannot change meeting room capacity.';
@@ -167,6 +167,43 @@ for each row
 execute function f_check_manager_change_capacity();
 
 
+-- trigger such that affected sessions and joins will be removed
+create or replace function f_check_change_capacity_affected_sessions()
+returns trigger as $$
+declare
+    num_participant INT;
+    session record;
+begin
+    -- remove affected joins
+    for session in select * from Sessions where Sessions.sdate > NEW.udate
+                                            and Sessions.sfloor = NEW.ufloor and Sessions.room = NEW.room
+    LOOP
+        select count(*) into num_participant
+        from Joins as j
+        where j.room = session.room and j.jfloor = session.sfloor
+            and j.jtime = session.stime and j.jdate = session.sdate;
+        if num_participant > NEW.new_cap then
+            delete from Joins where Joins.room = session.room and Joins.jfloor = session.sfloor
+                                and Joins.jtime = session.stime and Joins.jdate = session.sdate;
+        end if;
+    end LOOP;
+    
+    -- remove affected sessions
+    delete from Sessions where (
+        select count(*) from Joins as j where j.room = Sessions.room and j.jfloor = Sessions.sfloor
+            and j.jtime = Sessions.stime and j.jdate = Sessions.sdate
+        ) = 0;
+
+    return NULL;
+end;
+$$ LANGUAGE plpgsql;
+
+create trigger check_change_capacity_affected_sessions
+after insert on Updates
+for each row
+execute function f_check_change_capacity_affected_sessions();
+
+
 /* 
  * Working!
  * Basic_4: change the capacity of the room
@@ -175,11 +212,11 @@ execute function f_check_manager_change_capacity();
  */
 CREATE OR REPLACE FUNCTION change_capacity(_manager_id INTEGER, _room_num INTEGER, _room_floor INTEGER, _new_capacity INTEGER, _update_date DATE)
 RETURNS INT AS $$
-DECLARE
-	manager_did INT;
-	room_did INT;
-    num_participant INT;
-    session record;
+-- DECLARE
+-- 	manager_did INT;
+-- 	room_did INT;
+--     num_participant INT;
+--     session record;
 BEGIN
 	-- check room exists
 	IF NOT EXISTS (SELECT 1 FROM Updates u WHERE u.room = _room_num AND u.ufloor = _room_floor) THEN 
@@ -208,25 +245,25 @@ BEGIN
         values(_manager_id, _room_num, _room_floor, _update_date, _new_capacity);
 	
 	
-    -- remove affected joins
-    for session in select * from Sessions where Sessions.sdate > _update_date
-                                            and Sessions.sfloor = _room_floor and Sessions.room = _room_num
-    LOOP
-        select count(*) into num_participant
-        from Joins as j
-        where j.room = session.room and j.jfloor = session.sfloor
-            and j.jtime = session.stime and j.jdate = session.sdate;
-        if num_participant > _new_capacity then
-            delete from Joins where Joins.room = session.room and Joins.jfloor = session.sfloor
-                                and Joins.jtime = session.stime and Joins.jdate = session.sdate;
-        end if;
-    end LOOP;
+    -- -- remove affected joins
+    -- for session in select * from Sessions where Sessions.sdate > _update_date
+    --                                         and Sessions.sfloor = _room_floor and Sessions.room = _room_num
+    -- LOOP
+    --     select count(*) into num_participant
+    --     from Joins as j
+    --     where j.room = session.room and j.jfloor = session.sfloor
+    --         and j.jtime = session.stime and j.jdate = session.sdate;
+    --     if num_participant > _new_capacity then
+    --         delete from Joins where Joins.room = session.room and Joins.jfloor = session.sfloor
+    --                             and Joins.jtime = session.stime and Joins.jdate = session.sdate;
+    --     end if;
+    -- end LOOP;
 	
-    -- remove affected sessions
-    delete from Sessions where (
-        select count(*) from Joins as j where j.room = Sessions.room and j.jfloor = Sessions.sfloor
-            and j.jtime = Sessions.stime and j.jdate = Sessions.sdate
-        ) = 0;
+    -- -- remove affected sessions
+    -- delete from Sessions where (
+    --     select count(*) from Joins as j where j.room = Sessions.room and j.jfloor = Sessions.sfloor
+    --         and j.jtime = Sessions.stime and j.jdate = Sessions.sdate
+    --     ) = 0;
     return 0;
 END
 $$ LANGUAGE plpgsql;
