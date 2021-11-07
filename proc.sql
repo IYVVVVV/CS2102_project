@@ -626,10 +626,10 @@ $$ LANGUAGE plpgsql;
  * input: 
  * output:
  */
-CREATE OR REPLACE function approve_meeting (IN floor_num INT, room_num INT, IN date DATE, IN start_hour TIME, IN end_hour TIME, IN booker_eid INT, IN approve_eid INT) 
+CREATE OR REPLACE function approve_meeting (IN floor_num INT, room_num INT, IN date DATE, IN start_hour TIME, IN end_hour TIME, IN booker_eid INT, IN approve_eid INT, IN isApproved BOOLEAN) 
 RETURNS INT AS $$
 DECLARE 
-	mng_did INT; expect_did INT; rdate DATE;
+	mng_did INT; expect_did INT; rdate DATE; temp TIME :=start_hour ; booker_count INT; bid INT;
 BEGIN
 	SELECT did INTO mng_did FROM Managers WHERE eid=approve_eid;
 	IF mng_did IS NULL THEN
@@ -645,10 +645,41 @@ BEGIN
 		RAISE 'The given room % in % floor does not exist!', room_num, floor_num;
 	END IF;
 
-    IF mng_did=expect_eid THEN
-        INSERT INTO Sessions VALUES(room_num, floor_num, start_hour, booker_eid, approve_eid);
-	ELSE 
-		RAISE 'The given manager % is not in charge of this room', approve_eid;
+    SELECT count(booker_id) INTO booker_count FROM Sessions 
+    WHERE sfloor= floor_num AND room=room_num AND stime>=start_hour AND stime<end_hour AND sdate=date;
+    IF count<>1 THEN
+        RAISE 'The time range is not booked by a single employee';
+    END IF;
+
+    IF mng_did<>expect_eid THEN
+        RAISE 'The given manager % is not in charge of this room', approve_eid;
+    END IF;
+
+    WHILE temp< end_hour LOOP  
+        SELECT booker_id INTO bid FROM Sessions WHERE room=room_num AND sfloor=floor_num AND stime=temp AND sdate=date;
+        IF bid IS NOT NULL THEN
+            RAISE 'The room % in floor % is already booked at time % and date %', room_num, floor_num, temp, date;
+        END IF;
+        temp:=temp+'1 hour';
+    END LOOP;
+    
+    IF isApproved THEN
+        temp:=start_hour;
+        WHILE temp <end_hour LOOP
+            INSERT INTO Sessions VALUES (room_num, floor_num, temp, date, booker_eid, approve_eid)
+            ON CONFLICT(room_num, floor_num, temp, date) DO UPDATE SET manager_id=approve_id;
+            temp:= temp +'1 hour';
+        END LOOP;
+	ELSE    
+        temp:=start_hour;
+        WHILE temp<end_hour LOOP
+            DELETE FROM Joins WHERE room=room_num AND jfloor=floor_num AND jdate=date AND jtime=temp;
+            temp:= temp +'1 hour';
+        END LOOP;
+        temp:=start_hour;
+        WHILE temp<end_hour LOOP
+            DELETE FROM Sessions WHERE room=room_num AND sfloor=floor_num AND sdate=date AND stime=temp;
+        END LOOP;
     END IF;
     return 0;
 END;
