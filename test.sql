@@ -52,6 +52,11 @@ select "declare_health"(4, '2021-11-05', '38');--invalid, exist
 select "declare_health"(4, '2021-11-11', '38');--invalid, future
 select "declare_health"(4, '2020-11-05', '38');--valid, fever
 
+--A1
+select NonCompliance('2021-10-10','2021-10-01'); --invalid: the start date is after end date
+select NonCompliance('2021-10-10','2021-12-10'); --invalid: the end date is in the future
+select NonCompliance('2021-10-10','2021-11-07'); --valid
+
 --A2: view_booking_report
 select * from "view_booking_report"('2020-01-01', 19); -- have records
 select * from "view_booking_report"('2020-01-01', 9); -- no records
