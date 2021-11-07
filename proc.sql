@@ -1096,7 +1096,7 @@ BEGIN
     SELECT COUNT(*) INTO num_records FROM Health_declarations
         WHERE Health_declarations.eid = _eid AND hdate = now()::date;
     IF num_records = 0 THEN
-        RAISE EXCEPTION 'Contact tracing failed. No temperature DECLAREd today';
+        RAISE EXCEPTION 'Contact tracing failed. No temperature declared today';
     END IF;
 
     IF NOT (SELECT fever FROM Health_declarations WHERE Health_declarations.eid = _eid AND hdate = now()::date) THEN
