@@ -1,5 +1,5 @@
 DROP TABLE IF EXISTS
-    Employees, Contacts, Health_declarations, Departments, Meeting_Rooms, Updates, Juniors, Bookers, Seniors, Managers, Sessions, Joins;
+    Close_Contacts, Employees, Contacts, Health_declarations, Departments, Meeting_Rooms, Updates, Juniors, Bookers, Seniors, Managers, Sessions, Joins;
 
 -- department
 CREATE TABLE Departments (
@@ -129,11 +129,16 @@ CREATE TABLE Joins (
     jdate    DATE,
     PRIMARY KEY (eid, room, jfloor, jtime, jdate),
     FOREIGN KEY (eid) REFERENCES Employees (eid),
-    FOREIGN KEY (room, jfloor, jtime, jdate) REFERENCES Sessions (room, sfloor, stime, sdate),
-    -- check date and time is future
-    CONSTRAINT join_future_meeting CHECK (
-        jdate > now()::date
-        OR jdate = now()::date AND jtime > now()::time
-    )
+    FOREIGN KEY (room, jfloor, jtime, jdate) REFERENCES Sessions (room, sfloor, stime, sdate)
 );
+
+-- contact_tracing
+CREATE TABLE Close_Contacts (
+    eid         INTEGER,
+    affect_date DATE,
+    PRIMARY KEY (eid, affect_date),
+    FOREIGN KEY (eid) REFERENCES Employees (eid)
+);
+
+
 
