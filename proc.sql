@@ -388,13 +388,77 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+-- trigger such that only given a booker can change capacity
+CREATE OR REPLACE FUNCTION f_check_booker_book_room()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- check id in booker table
+	IF NOT EXISTS (SELECT 1 FROM Bookers b WHERE b.eid = NEW.booker_id) THEN 
+		RAISE EXCEPTION 'The booker is not authorized to book a room.';
+	END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_booker_book_room
+BEFORE INSERT ON Sessions
+FOR EACH ROW
+EXECUTE FUNCTION f_check_booker_book_room();
+
+-- trigger such that can only book future meeting
+CREATE OR REPLACE FUNCTION f_check_book_future_meeting()
+RETURNS TRIGGER AS $$
+BEGIN
+	IF NEW.sdate < now()::DATE OR (NEW.sdate = now()::DATE AND NEW.stime < now()::TIME) THEN
+		RAISE EXCEPTION 'A booking can only be made for future meetings';
+	END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_book_future_meeting
+BEFORE INSERT ON Sessions
+FOR EACH ROW
+EXECUTE FUNCTION f_check_book_future_meeting();
+
+-- trigger such that booker has not resigned
+CREATE OR REPLACE FUNCTION f_check_booker_not_resigned()
+RETURNS TRIGGER AS $$
+BEGIN
+	IF is_resigned(NEW.booker_id) THEN 
+        RAISE EXCEPTION 'Booker has resigned!';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_booker_not_resigned
+BEFORE INSERT ON Sessions
+FOR EACH ROW
+EXECUTE FUNCTION f_check_booker_not_resigned();
+
+-- trigger such that booker does not have fever
+CREATE OR REPLACE FUNCTION f_check_booker_not_fever()
+RETURNS TRIGGER AS $$
+BEGIN
+	IF (SELECT fever FROM Health_declarations WHERE eid = NEW.booker_id AND hdate = now()::DATE) THEN
+		RAISE EXCEPTION 'Booker is having a fever and cannot book!';
+	END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_booker_not_fever
+BEFORE INSERT ON Sessions
+FOR EACH ROW
+EXECUTE FUNCTION f_check_booker_not_fever();
+
 /* 
  * WORKING RIGHT NOW
  * Core_2: book a given room
  * input: 
  * output:
  */
- 
 CREATE OR REPLACE PROCEDURE book_room (_room_num INTEGER, _room_floor INTEGER, _start_hour TIME, _end_hour TIME, _session_date DATE, _booker_id INTEGER) AS $$
 DECLARE
 	current_hour TIME := _start_hour;
@@ -404,16 +468,6 @@ DECLARE
 	end_hour_ok INTEGER := 0;
 	has_been_booked INTEGER := 0;
 BEGIN
-	-- check id in booker table
-	IF NOT EXISTS (SELECT 1 FROM Bookers b WHERE b.eid = _booker_id) THEN 
-		RAISE EXCEPTION 'The booker is not authorized to book a room.';
-	END IF;
-	
-	-- check future meetings
-	IF _session_date < now()::DATE OR (_session_date = now()::DATE AND _start_hour < now()::TIME) THEN
-		RAISE EXCEPTION 'A booking can only be made for future meetings';
-	END IF;
-	
 	-- check room exists
 	IF NOT EXISTS (SELECT 1 FROM Updates u WHERE u.room = _room_num AND u.ufloor = _room_floor) THEN 
 		RAISE EXCEPTION 'The input room does not exist.';
@@ -434,16 +488,6 @@ BEGIN
 	END LOOP;
 	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
 		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
-	END IF;
-	
-	-- check booker has not resigned
-	IF is_resigned(_booker_id) THEN 
-        RAISE EXCEPTION 'Booker has resigned!';
-    END IF;
-	
-	-- check employee does not have fever
-	IF (SELECT fever FROM Health_declarations WHERE eid = _booker_id AND hdate = now()::DATE) THEN
-		RAISE EXCEPTION 'Booker is having a fever and cannot book!';
 	END IF;
 	
 	-- check the session has not been booked
