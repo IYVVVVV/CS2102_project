@@ -397,6 +397,7 @@ insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (
 insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (10, 10, '16:00', '2021-12-05', 20, NULL);
 insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (10, 10, '17:00', '2021-12-05', 20, NULL);
 insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (10, 10, '18:00', '2021-12-05', 20, NULL);
+insert into Sessions(room, sfloor, stime, sdate, booker_id, manager_id) values (10, 10, '18:00', '2021-11-04', 20, NULL);
 
 --Joins
 insert into Joins(eid, room, jfloor, jtime, jdate) values (19, 9, 9, '12:00', '2021-12-05');
