@@ -116,7 +116,7 @@ declare
     room_did INT;
 begin
     -- check manager is in the department
-    SELECT did INTO room_did FROM Meeting_Rooms r WHERE r.room = NEW.room AND r.mfloor = NEW.floor;
+    SELECT did INTO room_did FROM Meeting_Rooms r WHERE r.room = NEW.room AND r.mfloor = NEW.ufloor;
     SELECT did INTO manager_did FROM Managers NATURAL JOIN Employees WHERE eid = NEW.manager_id;
     IF (room_did <> manager_did) THEN
         RAISE EXCEPTION 'Manager from different department cannot change meeting room capacity.';
