@@ -21,18 +21,24 @@ select "remove_employee"(20, '2021-11-02'); --valid: employee who is a booker, r
 select "remove_employee"(29, '2021-11-02'); --valid: rollback approved meetings
 
 --C4: join_meeting
+call JoinMeeting(10, 10, '2021-12-05', '13:00', '14:30', 20); --invalid: the start hour and end hour must be full hour
 call JoinMeeting(10, 10, '2021-12-05', '13:00', '11:00', 9); --invalid: the start time is after end time
 call JoinMeeting(9, 9, '2021-12-05', '13:00', '14:00', 40); --invalid: no employee with such id
 call JoinMeeting(9, 9, '2021-12-05', '13:00', '14:00', 9); --invalid: the session has been approved
 call JoinMeeting(10, 10, '2021-12-05', '13:00', '14:00', 3); --invalid: the employee has resigned
-call JoinMeeting(10, 10, '2021-12-05', '13:00', '14:00', 20); --invalid: the employee has a fever
-call JoinMeeting(10, 10, '2021-12-05', '13:00', '14:00', 9); --valid
-call JoinMeeting(10, 10, '2021-12-05', '13:00', '14:00', 9); --(repeate once more) invalid: the employee has already joined
+call JoinMeeting(10, 10, '2021-11-04', '18:00', '19:00', 5); --invalid: the employee has a fever
+call JoinMeeting(10, 10, '2021-11-04', '12:00', '13:00', 9); --invalid: there is no session with given room, floor, date, time
+call JoinMeeting(10, 10, '2021-12-05', '13:00', '14:00', 9); --invalid: the employee has joined another session held at the same time
+call JoinMeeting(10, 10, '2021-12-05', '13:00', '14:00', 10); --invalid: the number of participants has reached the capacity limit of the room
+call JoinMeeting(10, 10, '2021-12-05', '13:00', '14:00', 20); --(after call LeaveMeeting of this) valid
+call JoinMeeting(10, 10, '2021-12-05', '13:00', '14:00', 20); --(repeate once more) invalid: the employee has already joined
 
 --C5: leave_meeting
+call LeaveMeeting(10, 10, '2021-12-05', '13:00', '14:30', 20); --invalid: the start hour and end hour must be full hour
 call LeaveMeeting(10, 10, '2021-12-05', '13:00', '11:00', 9); --invalid: the start time is after end time
 call LeaveMeeting(9, 9, '2021-12-05', '12:00', '13:00', 30); --invalid: no employee with such id
 call LeaveMeeting(9, 9, '2021-12-05', '12:00', '13:00', 19); --invalid: the meeting has been approved
+call LeaveMeeting(10, 10, '2021-11-04', '12:00', '13:00', 9); --invalid: there is no session with given room, floor, date, time
 call LeaveMeeting(10, 10, '2021-12-05', '13:00', '14:00', 20); --valid: the employee with id 20 left the session
 call LeaveMeeting(10, 10, '2021-12-05', '13:00', '14:00', 20); --(repeate once more) invalid: the employee has already left
 
