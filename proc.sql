@@ -1,23 +1,3 @@
--- trigger such that employees can only join future meetings
-create or replace function f_check_join_only_future_meeting()
-returns trigger as $$
-declare
-    num_participant INT;
-begin
-    if NEW.jdate > now()::date OR (NEW.jdate = now()::date and NEW.jtime > now()::time) then
-        return NEW;
-    end if;
-    raise exception 'Join failed. Can only join future meetings.';
-    return NULL;
-end;
-$$ LANGUAGE plpgsql;
-
-create trigger check_join_only_future_meeting
-before insert or update on Joins
-for each row
-execute function f_check_join_only_future_meeting();
-
-
 -- check if an employee is resigned
 CREATE OR REPLACE FUNCTION is_resigned(IN _eid INT)
 RETURNS BOOLEAN AS $$
@@ -29,6 +9,26 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+
+/* 
+ * Basic_1: add a new department
+ * input: 
+ * output:
+ */
+CREATE OR REPLACE FUNCTION add_department (IN _did INT, IN _name VARCHAR(100))
+RETURNS INT AS $$
+declare 
+    current_did int;
+begin
+    select did into current_did from Departments where did = _did;
+    if current_did is not NULL then
+        raise exception 'Add failed. There is already a department with such id.';
+    end if;
+
+	INSERT INTO Departments VALUES (_did, _name);
+    return 0;
+end;
+$$ LANGUAGE plpgsql;
 
 
 -- trigger such that only department with no current employees and no rooms can be deleted
@@ -53,27 +53,6 @@ create trigger check_department_deletion_condition
 before delete on Departments
 for each row
 execute function f_check_department_deletion_condition();
-
-
-/* 
- * Basic_1: add a new department
- * input: 
- * output:
- */
-CREATE OR REPLACE FUNCTION add_department (IN _did INT, IN _name VARCHAR(100))
-RETURNS INT AS $$
-declare 
-    current_did int;
-begin
-    select did into current_did from Departments where did = _did;
-    if current_did is not NULL then
-        raise exception 'Add failed. There is already a department with such id.';
-    end if;
-
-	INSERT INTO Departments VALUES (_did, _name);
-    return 0;
-end;
-$$ LANGUAGE plpgsql;
 
 
 /* 
@@ -462,6 +441,26 @@ BEGIN
 	AND s.stime < _end_hour;
 END;
 $$ LANGUAGE plpgsql;
+
+ 
+-- trigger such that employees can only join future meetings
+create or replace function f_check_join_only_future_meeting()
+returns trigger as $$
+declare
+    num_participant INT;
+begin
+    if NEW.jdate > now()::date OR (NEW.jdate = now()::date and NEW.jtime > now()::time) then
+        return NEW;
+    end if;
+    raise exception 'Join failed. Can only join future meetings.';
+    return NULL;
+end;
+$$ LANGUAGE plpgsql;
+
+create trigger check_join_only_future_meeting
+before insert or update on Joins
+for each row
+execute function f_check_join_only_future_meeting();
 
 /* 
  * Core_4: join a booked meeting room
