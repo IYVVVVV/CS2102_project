@@ -55,6 +55,12 @@ select "declare_health"(4, '2021-11-05', '38');--invalid, exist
 select "declare_health"(4, '2021-11-11', '38');--invalid, future
 select "declare_health"(4, '2020-11-05', '38');--valid, fever
 
+--H2: contact tracing
+select "declare_health"(19, now()::date, 40);
+select "declare_health"(15, now()::date, 36);
+select * from "contact_tracing"(15);
+select * from "contact_tracing"(19);
+
 --A1
 select NonCompliance('2021-10-10','2021-10-01'); --invalid: the start date is after end date
 select NonCompliance('2021-10-10','2021-12-10'); --invalid: the end date is in the future
