@@ -39,11 +39,11 @@ DECLARE
 BEGIN
     FOR emps IN SELECT * FROM Employees WHERE Employees.did=OLD.did LOOP
         IF NOT is_resigned(emps.eid) THEN
-            RAISE EXCEPTION 'Remove failed. Some employees in this department % is not removed yet', _did;
+            RAISE EXCEPTION 'Remove failed. Some employees in this department % is not removed yet', OLD.did;
         END IF;
     END LOOP;
-    IF (SELECT COUNT(*) FROM Meeting_Rooms WHERE Meeting_Rooms.did=_did ) <> 0 THEN
-        RAISE EXCEPTION 'Remove failed. Delete all meeting rooms inside department % before deleting the department!', _did;
+    IF (SELECT COUNT(*) FROM Meeting_Rooms WHERE Meeting_Rooms.did=OLD.did ) <> 0 THEN
+        RAISE EXCEPTION 'Remove failed. Delete all meeting rooms inside department % before deleting the department!', OLD.did;
     END IF;
     RETURN OLD;
 END;
@@ -409,20 +409,22 @@ $$ language plpgsql;
  */
 CREATE OR REPLACE FUNCTION search_room (_capacity INTEGER, _date DATE, _start_hour TIME, _end_hour TIME)
 RETURNS TABLE(room_number INTEGER, floor_number INTEGER, department_id INTEGER, capacity INTEGER) AS $$
-DECLARE
-	
 BEGIN
 	RETURN QUERY
+	With max_cap_update as (
+		select u1.room as room, u1.ufloor as ufloor, u1.new_cap
+		from updates as u1
+		where u1.udate = (select max(u2.udate) from updates as u2 where u2.room = u1.room and u2.ufloor=u1.ufloor)
+ )
+ 
 	SELECT DISTINCT r.room, r.mfloor, r.did, u.new_cap
 	FROM Meeting_Rooms r 
-	JOIN Updates u 
+	JOIN max_cap_update as u 
 	ON r.room = u.room AND r.mfloor = u.ufloor
-	, Sessions s
 	WHERE u.new_cap >= _capacity
-	AND NOT (s.room = r.room AND s.sfloor = r.mfloor AND s.sdate = _date AND s.stime >= _start_hour AND s.stime < _end_hour);
+	AND NOT EXISTS (SELECT FROM Sessions s WHERE s.room = r.room AND s.sfloor = r.mfloor AND s.sdate = _date AND s.stime >= _start_hour AND s.stime < _end_hour);
 END;
 $$ LANGUAGE plpgsql;
-
 
 -- trigger such that only given a booker can change capacity
 CREATE OR REPLACE FUNCTION f_check_booker_book_room()
@@ -872,9 +874,16 @@ BEGIN
         END IF;
 		
         -- Delete FROM Joins
-        DELETE FROM Joins WHERE eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
+		IF (SELECT COUNT(*) FROM Bookers WHERE eid = id) <> 0 THEN
+			DELETE FROM Joins WHERE room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
+		ELSE
+			DELETE FROM Joins WHERE eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
+		END IF;
         temp := temp + '1 hour';
     END LOOP;
+	IF (SELECT COUNT(*) FROM Bookers WHERE eid = id) <> 0 THEN
+		DELETE FROM Sessions WHERE Sessions.booker_id = id;
+	END IF;
 END;
 $$ LANGUAGE plpgsql;
 
