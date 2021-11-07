@@ -75,6 +75,27 @@ begin
 end;
 $$ LANGUAGE plpgsql;
 
+
+-- trigger such that only manager in the same department can add a room
+create or replace function f_check_manager_did_add_room()
+returns trigger as $$
+declare 
+    manager_did INT;
+begin
+    SELECT did INTO manager_did FROM Managers NATURAL JOIN Employees WHERE eid = _manager_id;
+    IF (_did <> manager_did) THEN
+        RAISE EXCEPTION 'Manager from different department cannot change meeting room capacity.';
+    END IF;
+    RETURN NEW;
+end;
+$$ LANGUAGE plpgsql;
+
+create trigger check_check_manager_did_add_room
+before insert on Meeting_Rooms
+for each row
+execute function f_check_manager_did_add_room();
+
+
 /* 
  * Working
  * Basic_3: add a new meeting room
@@ -83,8 +104,8 @@ $$ LANGUAGE plpgsql;
  */
 CREATE OR REPLACE FUNCTION add_room( _room_floor INTEGER, _room_num INTEGER, _room_name varchar(100), _room_capacity INTEGER, _did INTEGER, _manager_id INTEGER)
 RETURNS INT AS $$	
-DECLARE
-	manager_did INT;
+-- DECLARE
+-- 	manager_did INT;
 BEGIN
 	-- check did is valid
 	IF NOT EXISTS (SELECT 1 FROM Departments d WHERE d.did = _did) THEN 
@@ -94,11 +115,11 @@ BEGIN
 	IF NOT EXISTS (SELECT 1 FROM Managers m WHERE m.eid = _manager_id) THEN 
 		RAISE EXCEPTION 'Input eid is not a manager id';
 	END IF;
-	-- check manager is in the department
-	SELECT did INTO manager_did FROM Managers NATURAL JOIN Employees WHERE eid = _manager_id;
-	IF (_did <> manager_did) THEN
-		RAISE EXCEPTION 'Manager from different department cannot change meeting room capacity.';
-	END IF;
+	-- -- check manager is in the department
+	-- SELECT did INTO manager_did FROM Managers NATURAL JOIN Employees WHERE eid = _manager_id;
+	-- IF (_did <> manager_did) THEN
+	-- 	RAISE EXCEPTION 'Manager from different department cannot change meeting room capacity.';
+	-- END IF;
 	-- update the Meeting_Rooms and Updates tables
 	INSERT INTO Meeting_Rooms VALUES (_room_num, _room_floor, _room_name, _did);
 	INSERT INTO Updates (manager_id, room, ufloor, udate, new_cap) VALUES (_manager_id, _room_num, _room_floor, now()::DATE, _room_capacity);
