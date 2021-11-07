@@ -855,6 +855,43 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+-- trigger such that only a non-resigned employee can declare health on that day
+create or replace function f_check_non_resigned_declare_health()
+returns trigger as $$
+declare
+    rdate DATE;
+begin
+    -- check employee is not resigned on the given date
+    SELECT Employees.resigned_date INTO rdate FROM Employees WHERE Employees.eid=NEW.eid;
+    IF rdate is not NULL and rdate < NEW.hdate then
+        RAISE EXCEPTION 'Empoloyee % is resigned!', NEW.eid;
+    END IF;
+    RETURN NEW;
+end;
+$$ LANGUAGE plpgsql;
+
+create trigger check_non_resigned_declare_health
+before insert on Health_declarations
+for each row
+execute function f_check_non_resigned_declare_health();
+
+
+-- trigger such that derive a correct fever state when declaring health
+create or replace function f_check_fever_declare_health()
+returns trigger as $$
+begin
+    NEW.fever = CASE
+        WHEN NEW.htemp>=37.5 THEN TRUE
+        WHEN NEW.htemp <37.5 THEN FALSE
+    END;
+    RETURN NEW;
+end;
+$$ LANGUAGE plpgsql;
+
+create trigger check_fever_declare_health
+before insert on Health_declarations
+for each row
+execute function f_check_fever_declare_health();
 
 /* 
  * Health_1: used for daily declaration of temperature
@@ -864,20 +901,20 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION declare_health (IN _eid INT, IN ddate DATE, IN temp FLOAT(2))
 RETURNS INT AS $$
 DECLARE 
-	fever BOOLEAN;
+	fever BOOLEAN := FALSE;
 BEGIN
 	IF _eid NOT IN (SELECT eid FROM Employees)  THEN
 		RAISE 'The given eid % does not exist!', _eid
 		USING HINT = 'Please check the eid';
 	END IF;
-	IF is_resigned(_eid) THEN
-		RAISE 'Empoloyee % is resigned!', _eid
-		USING HINT = 'Please check the eid';
-	END IF;
-	fever = CASE
-		WHEN temp>=37.5 THEN TRUE
-		WHEN temp <37.5 THEN FALSE
-	END;
+	-- IF is_resigned(_eid) THEN
+	-- 	RAISE 'Empoloyee % is resigned!', _eid
+	-- 	USING HINT = 'Please check the eid';
+	-- END IF;
+	-- fever = CASE
+	-- 	WHEN temp>=37.5 THEN TRUE
+	-- 	WHEN temp <37.5 THEN FALSE
+	-- END;
 	INSERT INTO Health_declarations VALUES (_eid, ddate, temp, fever);
     return 0;
 END;
