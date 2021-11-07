@@ -383,6 +383,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 /* 
+ * WORKING
  * Core_3: remove booking of a given room
  * input: 
  * output:
@@ -396,6 +397,7 @@ DECLARE
 	each_hour TIME[];
 	var_hour TIME;
 	booker_eid INTEGER;
+	session record;
 BEGIN
 	-- check room exists
 	IF NOT EXISTS (SELECT 1 FROM Updates u WHERE u.room = _room_num AND u.ufloor = _room_floor) THEN 
@@ -433,16 +435,16 @@ BEGIN
 	IF unbooker_ok = 0 THEN
 		RAISE EXCEPTION 'The unbooker and booker must be the same person';
 	END IF;
-	
-	-- check unbook everything (not working)
-	/*IF EXISTS (SELECT 1 FROM Sessions s WHERE s.room = _room_num AND s.sfloor = _room_floor AND s.sdate = _session_date AND s.stime = (_start_hour - '1 hour') AND s.booker_id = _unbooker_id) THEN
-		RAISE EXCEPTION 'The unbook must be performed on the whole meeting!';
-	END IF;
-	IF EXISTS (SELECT 1 FROM Sessions s WHERE s.room = _room_num AND s.sfloor = _room_floor AND s.sdate = _session_date AND s.stime = (_start_hour + '1 hour') AND s.booker_id = _unbooker_id) THEN
-		RAISE EXCEPTION 'The unbook must be performed on the whole meeting!';
-	END IF;*/
-	
-	-- remove joins 
+	 
+	-- remove affected joins
+    FOR session IN SELECT * FROM Sessions s where s.sfloor = _room_floor AND s.room = _room_num AND s.sdate = _session_date AND s.stime >= _start_hour AND s.stime < _end_hour
+    LOOP
+        DELETE FROM Joins j 
+		WHERE j.room = session.room
+		AND j.jfloor = session.sfloor
+        AND j.jtime = session.stime
+		AND j.jdate = session.sdate;
+    END LOOP;
 	
 	-- perform deletion
 	DELETE FROM Sessions s
