@@ -745,7 +745,7 @@ $$ LANGUAGE plpgsql;
  * by default, we assume the date is today, and today's meeting
  */
 CREATE OR REPLACE FUNCTION contact_tracing (IN _eid INT)
-RETURNS TABLE (eid INT)
+RETURNS TABLE (close_contact_eid INT)
 AS $$
 declare
     current_eid int;
@@ -804,7 +804,10 @@ begin
         _affected_date = now()::date + 1;
         WHILE _affected_date <= now()::date + 7 LOOP
             -- check primary key constraint before insert
-            INSERT INTO Close_Contacts(eid, affected_date) VALUES (close_contact_eid, _affected_date);
+            if not exists (select * from Close_Contacts 
+                where Close_Contacts.eid = close_contact_eid and Close_Contacts.affect_date = _affected_date) then
+                INSERT INTO Close_Contacts(eid, affect_date) VALUES (close_contact_eid, _affected_date);
+            end if;
             _affected_date := _affected_date + 1;
         END LOOP;
     -- remove their future bookings and other's join (D+1 to D+7)
@@ -823,7 +826,7 @@ begin
     END LOOP;
 
     return query 
-        select jo.eid
+        select jo.eid as close_contact_eid
         from Sessions as ss, Joins as jo
         where ss.manager_id is not NULL and jo.eid <> _eid
             and ss.sdate <= now()::date and ss.sdate >= (now():: date - 3)
