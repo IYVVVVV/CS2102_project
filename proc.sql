@@ -478,6 +478,7 @@ DECLARE
     existing_eid INT;
     resigned DATE;
     fever_id INT;
+    close_contact INT;
     existing_room INT;
     session_eid INT;
     joined_id INT; 
