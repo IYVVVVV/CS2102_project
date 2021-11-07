@@ -275,15 +275,6 @@ begin
         raise exception 'Remove failed. The employee has been removed before.';
     end if;
         
-    select count(*) into num_records
-    from Joins as j, Sessions as s
-    where j.room = s.room and j.jfloor = s.sfloor and j.jtime = s.stime and j.jdate = s.sdate
-        and j.eid = _eid and s.manager_id is not null
-        and j.jdate > _resigned_date;
-    if num_records <> 0 then
-        raise exception 'Remove failed. The employee joins some approved meetings later then the given date.';
-    end if;
-        
     update Employees set resigned_date = _resigned_date where eid = _eid;
     
     -- remove his future booking session ans all joins
@@ -543,7 +534,11 @@ BEGIN
     END IF; 
 	
     -- *check whether the employee has close contact in the last 7 days
-
+    SELECT COUNT(*) INTO close_contact FROM Close_Contacts WHERE eid = id AND affect_date = meeting_date;
+    IF close_contact <> 0 THEN
+        raise exception 'Join failed. The employee had a close contact with someone having a fever.';
+    END IF;
+    
     -- Join
     WHILE temp < end_hour LOOP
         -- check whether the session exists
@@ -616,35 +611,40 @@ BEGIN
 		END IF;
 	END LOOP;
 	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
-		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
+		RAISE EXCEPTION	'Leave failed. The input start hour or end hour must be full hour.';
 	END IF;
 
     -- check whether start time is before after time
     IF start_hour > end_hour THEN
-    raise exception 'Leave failed because start time is after end time.';
+    raise exception 'Leave failed. Start time is after end time.';
     END IF;
+	
     -- check whether the employee with eid exists
     SELECT eid INTO current_eid FROM Employees WHERE eid = id;
     IF current_eid IS NULL THEN
         raise exception 'Leave Failed. There is no employee with such id.';
     END IF;
+	
     -- Leave
     WHILE temp < end_hour LOOP
         -- check whether the session exists
         SELECT room INTO existing_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date;
         IF existing_room IS NULL THEN 
-            raise exception 'Join failed. There is no session held at given time, date, room, floor.';
+            raise exception 'Leave failed. There is no session held at given time, date, room, floor.';
         END IF;
+		
         -- check whether the session has been approved
         SELECT room INTO meeting_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL;
         IF meeting_room IS NULL THEN
             raise exception 'Leave failed. The meeting has been approved already.';
         END IF;
+		
         -- check whether the employee has left the meeting or did not join
         SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
         IF joined_id IS NULL THEN
             raise exception 'Leave failed. The employee has already left the meeting or did not join the meeting';
         END IF;
+		
         -- Delete from Joins
         DELETE FROM Joins WHERE eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
         temp := temp + '1 hour';
@@ -857,12 +857,15 @@ $$LANGUAGE plpgsql;
  * input: 
  * output:
  */
---create or replace function non_compliance
 CREATE OR REPLACE FUNCTION NonCompliance (IN sdate DATE, IN edate DATE)
 RETURNS TABLE(EmployeeID INT, NumberOfDays INT) AS $$
 BEGIN 
     IF sdate > edate THEN
-    raise exception 'Calcalue failed because start date is after end date.';
+        raise exception 'Compliance tracing failed. The start date is after end date.';
+    END IF;
+    
+    IF edate > now()::date THEN
+        raise exception 'Compliance tracing failed. The end date is in the future.';
     END IF;
 
     RETURN QUERY
