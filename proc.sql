@@ -534,7 +534,11 @@ BEGIN
     END IF; 
 	
     -- *check whether the employee has close contact in the last 7 days
-
+    SELECT COUNT(*) INTO close_contact FROM Close_Contacts WHERE eid = id AND affect_date = meeting_date;
+    IF close_contact <> 0 THEN
+        raise exception 'Join failed. The employee had a close contact with someone having a fever.';
+    END IF;
+    
     -- Join
     WHILE temp < end_hour LOOP
         -- check whether the session exists
@@ -607,12 +611,12 @@ BEGIN
 		END IF;
 	END LOOP;
 	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
-		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
+		RAISE EXCEPTION	'Leave failed. The input start hour or end hour must be full hour.';
 	END IF;
 
     -- check whether start time is before after time
     IF start_hour > end_hour THEN
-    raise exception 'Leave failed because start time is after end time.';
+    raise exception 'Leave failed. Start time is after end time.';
     END IF;
 	
     -- check whether the employee with eid exists
