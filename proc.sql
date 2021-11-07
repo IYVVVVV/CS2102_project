@@ -167,6 +167,43 @@ for each row
 execute function f_check_manager_change_capacity();
 
 
+-- trigger such that affected sessions and joins will be removed
+create or replace function f_check_change_capacity_affected_sessions()
+returns trigger as $$
+declare
+    num_participant INT;
+    session record;
+begin
+    -- remove affected joins
+    for session in select * from Sessions where Sessions.sdate > NEW.udate
+                                            and Sessions.sfloor = NEW.ufloor and Sessions.room = NEW.room
+    LOOP
+        select count(*) into num_participant
+        from Joins as j
+        where j.room = session.room and j.jfloor = session.sfloor
+            and j.jtime = session.stime and j.jdate = session.sdate;
+        if num_participant > NEW.new_cap then
+            delete from Joins where Joins.room = session.room and Joins.jfloor = session.sfloor
+                                and Joins.jtime = session.stime and Joins.jdate = session.sdate;
+        end if;
+    end LOOP;
+    
+    -- remove affected sessions
+    delete from Sessions where (
+        select count(*) from Joins as j where j.room = Sessions.room and j.jfloor = Sessions.sfloor
+            and j.jtime = Sessions.stime and j.jdate = Sessions.sdate
+        ) = 0;
+
+    return NULL;
+end;
+$$ LANGUAGE plpgsql;
+
+create trigger check_change_capacity_affected_sessions
+after insert on Updates
+for each row
+execute function f_check_change_capacity_affected_sessions();
+
+
 /* 
  * Working!
  * Basic_4: change the capacity of the room
@@ -175,11 +212,11 @@ execute function f_check_manager_change_capacity();
  */
 CREATE OR REPLACE FUNCTION change_capacity(_manager_id INTEGER, _room_num INTEGER, _room_floor INTEGER, _new_capacity INTEGER, _update_date DATE)
 RETURNS INT AS $$
-DECLARE
-	manager_did INT;
-	room_did INT;
-    num_participant INT;
-    session record;
+-- DECLARE
+-- 	manager_did INT;
+-- 	room_did INT;
+--     num_participant INT;
+--     session record;
 BEGIN
 	-- check room exists
 	IF NOT EXISTS (SELECT 1 FROM Updates u WHERE u.room = _room_num AND u.ufloor = _room_floor) THEN 
@@ -208,25 +245,25 @@ BEGIN
         values(_manager_id, _room_num, _room_floor, _update_date, _new_capacity);
 	
 	
-    -- remove affected joins
-    for session in select * from Sessions where Sessions.sdate > _update_date
-                                            and Sessions.sfloor = _room_floor and Sessions.room = _room_num
-    LOOP
-        select count(*) into num_participant
-        from Joins as j
-        where j.room = session.room and j.jfloor = session.sfloor
-            and j.jtime = session.stime and j.jdate = session.sdate;
-        if num_participant > _new_capacity then
-            delete from Joins where Joins.room = session.room and Joins.jfloor = session.sfloor
-                                and Joins.jtime = session.stime and Joins.jdate = session.sdate;
-        end if;
-    end LOOP;
+    -- -- remove affected joins
+    -- for session in select * from Sessions where Sessions.sdate > _update_date
+    --                                         and Sessions.sfloor = _room_floor and Sessions.room = _room_num
+    -- LOOP
+    --     select count(*) into num_participant
+    --     from Joins as j
+    --     where j.room = session.room and j.jfloor = session.sfloor
+    --         and j.jtime = session.stime and j.jdate = session.sdate;
+    --     if num_participant > _new_capacity then
+    --         delete from Joins where Joins.room = session.room and Joins.jfloor = session.sfloor
+    --                             and Joins.jtime = session.stime and Joins.jdate = session.sdate;
+    --     end if;
+    -- end LOOP;
 	
-    -- remove affected sessions
-    delete from Sessions where (
-        select count(*) from Joins as j where j.room = Sessions.room and j.jfloor = Sessions.sfloor
-            and j.jtime = Sessions.stime and j.jdate = Sessions.sdate
-        ) = 0;
+    -- -- remove affected sessions
+    -- delete from Sessions where (
+    --     select count(*) from Joins as j where j.room = Sessions.room and j.jfloor = Sessions.sfloor
+    --         and j.jtime = Sessions.stime and j.jdate = Sessions.sdate
+    --     ) = 0;
     return 0;
 END
 $$ LANGUAGE plpgsql;
@@ -522,6 +559,40 @@ before insert or update on Joins
 for each row
 execute function f_check_join_only_future_meeting();
 
+-- trigger checking the time entered is full hour or not
+create or replace function f_check_join_with_full_hour()
+returns trigger as $$
+declare
+    each_hour TIME[];
+    var_hour TIME;
+    start_hour_ok INTEGER := 0;
+    end_hour_ok INTEGER := 0;
+begin
+	each_hour := '{00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00,
+                  07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 
+                  13:00, 14:00, 15:00, 16:00, 17:00, 18:00,
+                  19:00, 20:00, 21:00, 22:00, 23:00, 24:00}'::TIME[];
+	FOREACH var_hour IN ARRAY each_hour LOOP
+		IF var_hour = NEW.start_hour THEN
+			start_hour_ok := 1;
+		END IF;
+		IF var_hour = NEW.end_hour THEN
+			end_hour_ok := 1;
+		END IF;
+	END LOOP;
+	IF start_hour_ok = 1 AND end_hour_ok = 1 THEN
+		return NEW;
+	END IF;
+    	raise exception 'Join failed. Can only join future meetings.';
+    	return NULL;
+end;
+$$ LANGUAGE plpgsql;
+
+create trigger check_join_with_full_hour
+before insert or update on Joins
+for each row
+execute function f_check_join_with_full_hour();
+
 /* 
  * Core_4: join a booked meeting room
  * input: floor_number, room_number, meeting_date, start_hour, end_hour, eid
@@ -530,10 +601,10 @@ execute function f_check_join_only_future_meeting();
 CREATE OR REPLACE PROCEDURE JoinMeeting (IN floor_number INT, IN room_number INT, IN meeting_date Date, IN start_hour TIME, IN end_hour TIME, IN id INT) AS $$
 DECLARE 
     temp TIME := start_hour;
-    each_hour TIME[];
-    var_hour TIME;
-    start_hour_ok INTEGER := 0;
-    end_hour_ok INTEGER := 0;
+--     each_hour TIME[];
+--     var_hour TIME;
+--     start_hour_ok INTEGER := 0;
+--     end_hour_ok INTEGER := 0;
     existing_eid INT;
     resigned DATE;
     fever_id INT;
@@ -545,22 +616,22 @@ DECLARE
     capacity INT :=0;
     number_participants INT :=0;
 BEGIN
-    -- check whether start and end hour are full hour
-	each_hour := '{00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00,
-                  07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 
-                  13:00, 14:00, 15:00, 16:00, 17:00, 18:00,
-                  19:00, 20:00, 21:00, 22:00, 23:00, 24:00}'::TIME[];
-	FOREACH var_hour IN ARRAY each_hour LOOP
-		IF var_hour = start_hour THEN
-			start_hour_ok := 1;
-		END IF;
-		IF var_hour = end_hour THEN
-			end_hour_ok := 1;
-		END IF;
-	END LOOP;
-	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
-		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
-	END IF;
+--     -- check whether start and end hour are full hour
+-- 	each_hour := '{00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00,
+--                   07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 
+--                   13:00, 14:00, 15:00, 16:00, 17:00, 18:00,
+--                   19:00, 20:00, 21:00, 22:00, 23:00, 24:00}'::TIME[];
+-- 	FOREACH var_hour IN ARRAY each_hour LOOP
+-- 		IF var_hour = start_hour THEN
+-- 			start_hour_ok := 1;
+-- 		END IF;
+-- 		IF var_hour = end_hour THEN
+-- 			end_hour_ok := 1;
+-- 		END IF;
+-- 	END LOOP;
+-- 	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
+-- 		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
+-- 	END IF;
 	
     -- check whether start time is before end time
     IF start_hour > end_hour THEN
