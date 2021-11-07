@@ -84,8 +84,8 @@ $$ LANGUAGE plpgsql;
  */
 CREATE OR REPLACE FUNCTION add_room( _room_floor INTEGER, _room_num INTEGER, _room_name varchar(100), _room_capacity INTEGER, _did INTEGER, _manager_id INTEGER)
 RETURNS INT AS $$	
--- DECLARE
--- 	manager_did INT;
+DECLARE
+	manager_did INT;
 BEGIN
 	-- check did is valid
 	IF NOT EXISTS (SELECT 1 FROM Departments d WHERE d.did = _did) THEN 
