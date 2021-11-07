@@ -61,12 +61,13 @@ end;
 $$ LANGUAGE plpgsql;
 
 /* 
+ * Working
  * Basic_3: add a new meeting room
  * input: 
  * output:
  */
-CREATE OR REPLACE FUNCTION add_room(_room_num INTEGER, _room_floor INTEGER, _room_name varchar(100), _room_capacity INTEGER, _did INTEGER, _manager_id INTEGER, _update_date DATE)
-RETURNS INT AS $$
+CREATE OR REPLACE FUNCTION add_room( _room_floor INTEGER, _room_num INTEGER, _room_name varchar(100), _room_capacity INTEGER, _did INTEGER, _manager_id INTEGER)
+RETURNS INT AS $$	
 DECLARE
 	manager_did INT;
 BEGIN
@@ -85,7 +86,7 @@ BEGIN
 	END IF;
 	-- update the Meeting_Rooms and Updates tables
 	INSERT INTO Meeting_Rooms VALUES (_room_num, _room_floor, _room_name, _did);
-	INSERT INTO Updates(manager_id, room, ufloor, udate, new_cap) VALUES (_manager_id, _room_num, _room_floor, _update_date, _room_capacity);
+	INSERT INTO Updates (manager_id, room, ufloor, udate, new_cap) VALUES (_manager_id, _room_num, _room_floor, now()::DATE, _room_capacity);
 	RETURN 0;
 END	
 $$ LANGUAGE plpgsql;
@@ -116,6 +117,7 @@ $$ LANGUAGE plpgsql;
 
 
 /* 
+ * Working!
  * Basic_4: change the capacity of the room
  * input: 
  * output:
@@ -128,8 +130,6 @@ DECLARE
     num_participant INT;
     session record;
 BEGIN
-	-- check update time is later than current
-	
 	-- check room exists
 	IF NOT EXISTS (SELECT 1 FROM Updates u WHERE u.room = _room_num AND u.ufloor = _room_floor) THEN 
 		RAISE EXCEPTION 'The input room does not exist.';
@@ -145,6 +145,11 @@ BEGIN
 	SELECT did INTO manager_did FROM Managers NATURAL JOIN Employees WHERE eid = _manager_id;
 	IF (room_did <> manager_did) THEN
 		RAISE EXCEPTION 'Manager from different department cannot change meeting room capacity.';
+	END IF;
+	
+	-- check future meetings
+	IF _update_date < now()::DATE THEN
+		RAISE EXCEPTION 'The update date cannot earlier than today';
 	END IF;
 	
 	-- update the Updates table
@@ -165,6 +170,7 @@ BEGIN
                                 and Joins.jtime = session.stime and Joins.jdate = session.sdate;
         end if;
     end LOOP;
+	
     -- remove affected sessions
     delete from Sessions where (
         select count(*) from Joins as j where j.room = Sessions.room and j.jfloor = Sessions.sfloor
@@ -300,6 +306,7 @@ $$ LANGUAGE plpgsql;
 
 
 /* 
+ * WORKING RIGHT NOW
  * Core_2: book a given room
  * input: 
  * output:
