@@ -149,7 +149,7 @@ for each row
 execute function f_check_future_change_capacity();
 
 
--- trigger such that only cannot manager can change capacity
+-- trigger such that only given a manager can change capacity
 create or replace function f_check_manager_change_capacity()
 returns trigger as $$
 begin
