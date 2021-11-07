@@ -852,6 +852,20 @@ $$LANGUAGE plpgsql;
  * output:
  */
 --create or replace function non_compliance
+CREATE OR REPLACE FUNCTION NonCompliance (IN sdate DATE, IN edate DATE)
+RETURNS TABLE(EmployeeID INT, NumberOfDays INT) AS $$
+BEGIN 
+    IF sdate > edate THEN
+    raise exception 'Calcalue failed because start date is after end date.';
+    END IF;
+
+    RETURN QUERY
+        SELECT e.eid AS EmployeeID, (((edate - sdate) + 1) - (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid)) AS NumberOfDays
+        FROM Employees e
+        WHERE (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - sdate)+1)
+        ORDER BY (((edate - sdate) + 1) -  (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid)) DESC;
+END;
+$$ LANGUAGE plpgsql;
 
 
 /* 
