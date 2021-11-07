@@ -656,54 +656,98 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE function approve_meeting (IN floor_num INT, room_num INT, IN date DATE, IN start_hour TIME, IN end_hour TIME, IN booker_eid INT, IN approve_eid INT, IN isApproved BOOLEAN) 
 RETURNS INT AS $$
 DECLARE 
-	meid INT; mng_did INT; expect_did INT; rdate DATE; temp TIME :=start_hour ; booker_count INT; bid INT;
+	meid INT; 
+	mng_did INT; 
+	expect_did INT; 
+	rdate DATE; 
+	temp TIME;
+	booker_count INT; 
+	bid INT;
+	start_hour_ok INT := 0;
+	end_hour_ok INT := 0;
+	each_hour TIME[];
 BEGIN
+	-- check is manager
     SELECT eid INTO meid From Managers WHERE eid=approve_eid;
     IF meid IS NULL THEN
 		RAISE 'The given eid % is not a manager!', approve_eid;
 	END IF;
-
-
+	
+	-- get manager department id
 	SELECT did INTO mng_did FROM Employees WHERE eid=approve_eid;
 	
-	
+	-- check whether manager has resigned 
 	IF is_resigned(approve_eid) THEN 
         RAISE 'Manager % is resigned!', approve_eid;
     END IF;
     
+	-- get room department id and check room exists or not 
     SELECT did INTO expect_did FROM Meeting_Rooms WHERE mfloor=floor_num and Room=room_num;
 	IF expect_did IS NULL THEN
 		RAISE 'The given room % in % floor does not exist!', room_num, floor_num;
 	END IF;
-
-    SELECT  count( DISTINCT booker_id) INTO booker_count FROM Sessions 
-    WHERE sfloor= floor_num AND room=room_num AND stime>=start_hour AND stime< end_hour AND sdate=date;
-    IF booker_count>1 THEN
-        RAISE 'The time range is not booked by a single employee';
-    END IF;
-
+	
+	-- check for start and end hour
+	each_hour := '{00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00,
+                  07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 
+                  13:00, 14:00, 15:00, 16:00, 17:00, 18:00,
+                  19:00, 20:00, 21:00, 22:00, 23:00, 24:00}'::TIME[];
+	temp := start_hour;
+	FOREACH temp IN ARRAY each_hour LOOP
+		IF temp = start_hour THEN
+			start_hour_ok := 1;
+		END IF;
+		IF temp = end_hour THEN
+			end_hour_ok := 1;
+		END IF;
+	END LOOP;
+	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
+		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
+	END IF;
+	
+	-- check future meetings
+	IF date < now()::DATE OR (date = now()::DATE AND start_hour < now()::TIME) THEN
+		RAISE EXCEPTION 'An approval can only be made for future meetings';
+	END IF;
+	
+	-- check room department and manager department
     IF mng_did<>expect_did THEN
-        RAISE 'The given manager % is not in charge of this room', approve_eid;
+        RAISE 'The given manager % is not in the same department as the meeting room.', approve_eid;
     END IF;
-
-    WHILE temp< end_hour LOOP  
-        SELECT booker_id INTO bid FROM Sessions WHERE room=room_num AND sfloor=floor_num AND stime=temp AND sdate=date AND approve_eid IS NOT NULL;
-        IF bid IS NOT NULL THEN
-            RAISE 'The room % in floor % is already booked at time % and date %', room_num, floor_num, temp, date;
+	
+	-- check session exists and booker is correct 
+	temp := start_hour;
+	WHILE temp< end_hour LOOP  
+        SELECT booker_id INTO bid FROM Sessions WHERE room=room_num AND sfloor=floor_num AND stime=temp AND sdate=date;
+		IF bid IS NULL THEN
+			RAISE EXCEPTION 'Session does not exist';
+		END IF;
+        IF bid <> booker_eid THEN 
+            RAISE EXCEPTION 'The booker for the meeting is not correct.';
         END IF;
         temp:=temp+'1 hour';
     END LOOP;
+	
+	-- check already approved
+	temp := start_hour;
+    WHILE temp < end_hour LOOP  
+        SELECT booker_id INTO bid FROM Sessions WHERE room = room_num AND sfloor = floor_num AND stime = temp AND sdate = date AND manager_id IS NOT NULL;
+        IF bid IS NOT NULL THEN
+            RAISE EXCEPTION 'The room % in floor % is already approved at time % and date %', room_num, floor_num, temp, date;
+        END IF;
+        temp := temp+ '1 hour';
+    END LOOP;
     
     IF isApproved THEN
-        temp:=start_hour;
-        WHILE temp <end_hour LOOP
+        temp := start_hour;
+        WHILE temp < end_hour LOOP
             INSERT INTO Sessions VALUES (room_num, floor_num, temp, date, booker_eid, approve_eid)
-            ON CONFLICT(room, sfloor, stime, sdate) DO UPDATE SET manager_id=approve_eid;
+            ON CONFLICT(room, sfloor, stime, sdate) DO UPDATE SET manager_id = approve_eid;
             temp:= temp +'1 hour';
         END LOOP;
 	ELSE    
-        temp:=start_hour;
-        WHILE temp<end_hour LOOP
+        temp := start_hour;
+        WHILE temp < end_hour LOOP
             DELETE FROM Joins WHERE room=room_num AND jfloor=floor_num AND jdate=date AND jtime=temp;
             temp:= temp +'1 hour';
         END LOOP;
