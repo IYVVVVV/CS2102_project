@@ -494,25 +494,30 @@ BEGIN
 	IF start_hour_ok = 0 OR end_hour_ok = 0 THEN
 		RAISE EXCEPTION	'The input start hour or end hour must be full hour.';
 	END IF;
+	
     -- check whether start time is before end time
     IF start_hour > end_hour THEN
         raise exception 'Join failed because start time is after end time.';
     END IF;
+	
     -- check whether the employee with eid exists
     SELECT eid INTO existing_eid FROM Employees WHERE eid = id;
     IF existing_eid IS NULL THEN
         raise exception 'Join Failed. There is no employee with such id.';
     END IF;
+	
     -- check whether the employee has resigned
     SELECT resigned_date INTO resigned FROM Employees WHERE eid = id;
     IF resigned IS NOT NULL AND meeting_date > resigned THEN
         raise exception 'Join failed. The employee has resigned.';
     END IF;
-    -- check whether the employee has a fever on the meeting date
-    SELECT h.eid INTO fever_id FROM Health_declarations h WHERE h.eid = id AND h.hdate = meeting_date AND fever = true;
+	
+    -- check whether the employee has a fever
+    SELECT h.eid INTO fever_id FROM Health_declarations h WHERE h.eid = id AND h.hdate = now()::date AND fever = true;
     IF fever_id IS NOT NULL THEN
-        raise exception 'Join failed. The employee has a fever on the meeting date.';
+        raise exception 'Join failed. The employee has a fever.';
     END IF; 
+	
     -- *check whether the employee has close contact in the last 7 days
 
     -- Join
@@ -522,27 +527,32 @@ BEGIN
         IF existing_room IS NULL THEN 
             raise exception 'Join failed. There is no session held at given time, date, room, floor.';
         END IF;
+		
         -- check whether the employee has joined any session among the time period already
         SELECT eid INTO joined_id FROM Joins j WHERE j.eid = id AND room = room_number AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
         IF joined_id IS NOT NULL THEN
             raise exception 'Join failed. The time period contains some sessions that employee has already joined';
         END IF;
+		
         -- check an employee cannot join several sessions at the same time
         SELECT eid INTO session_eid FROM Joins WHERE eid = id AND jtime = temp AND jdate = meeting_date;
         IF session_eid IS NOT NULL THEN
             raise exception 'Join failed. The employee has joined another session held at the same time and date.';
         END IF;
-        -- check whether all the seesions have been approved
+		
+        -- check whether all the sesions have been approved
         SELECT room INTO meeting_room FROM Sessions WHERE room = room_number AND sfloor = floor_number AND stime = temp AND sdate = meeting_date AND manager_id IS NULL;
         IF meeting_room IS NULL THEN
             raise exception 'Join failed. The time period contains some sessions that has been approved already.';
         END IF;
+		
         -- check if exceede the capacity limits.
         SELECT new_cap INTO capacity FROM Updates WHERE room = meeting_room AND ufloor = floor_number AND udate = (SELECT MAX(udate) FROM Updates WHERE room = meeting_room AND ufloor = floor_number AND udate < meeting_date);
         SELECT COUNT(*) INTO number_participants FROM Joins WHERE room = meeting_room AND jfloor = floor_number AND jtime = temp AND jdate = meeting_date;
         IF number_participants >= capacity THEN
             raise exception 'Join failed. The number of participants has reached the capacity limit of the room';
         END IF;
+		
         -- Insert into Joins
         INSERT INTO Joins VALUES (id, room_number, floor_number, temp, meeting_date);
         temp := temp + '1 hour';
