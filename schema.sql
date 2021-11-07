@@ -129,12 +129,7 @@ CREATE TABLE Joins (
     jdate    DATE,
     PRIMARY KEY (eid, room, jfloor, jtime, jdate),
     FOREIGN KEY (eid) REFERENCES Employees (eid),
-    FOREIGN KEY (room, jfloor, jtime, jdate) REFERENCES Sessions (room, sfloor, stime, sdate),
-    -- check date and time is future
-    CONSTRAINT join_future_meeting CHECK (
-        jdate > now()::date
-        OR jdate = now()::date AND jtime > now()::time
-    )
+    FOREIGN KEY (room, jfloor, jtime, jdate) REFERENCES Sessions (room, sfloor, stime, sdate)
 );
 
 -- contact_tracing

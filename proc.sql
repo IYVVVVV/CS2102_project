@@ -1,3 +1,24 @@
+-- trigger such that if no one joins a session in Joins, the session is removed from Sessions table
+create or replace function f_check_join_only_future_meeting()
+returns trigger as $$
+declare
+    num_participant INT;
+begin
+    if NEW.jdate > now()::date OR (NEW.jdate = now()::date and NEW.jtime > now()::time) then
+        return NEW;
+    end if;
+    raise exception 'Join failed. Can only join future meetings.';
+    return NULL;
+end;
+$$ LANGUAGE plpgsql;
+
+create trigger check_join_only_future_meeting
+before insert or update on Joins
+for each row
+execute function f_check_join_only_future_meeting();
+
+
+-- check if an employee is resigned
 CREATE OR REPLACE FUNCTION is_resigned(IN _eid INT)
 RETURNS BOOLEAN AS $$
 DECLARE
