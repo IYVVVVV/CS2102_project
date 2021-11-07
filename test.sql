@@ -43,7 +43,10 @@ call LeaveMeeting(10, 10, '2021-12-05', '13:00', '14:00', 20); --valid: the empl
 call LeaveMeeting(10, 10, '2021-12-05', '13:00', '14:00', 20); --(repeate once more) invalid: the employee has already left
 
 --C6: approve_meeting
-
+select "approve_meeting"( 9, 9, '2021-12-07', '12:00', '17:00', 19, 29,TRUE); -- valid
+select "approve_meeting"( 9, 9, '2021-12-07', '12:00', '17:00', 19, 29,TRUE); -- invalid, The room 9 in floor 9 is already booked at time 12:00:00 and date 2021-12-07
+select "approve_meeting"( 10, 10, '2021-12-07', '12:00', '17:00', 20, 22,TRUE); -- invalid,  Manager 22 is resigned!
+select "approve_meeting"( 9, 9, '2021-12-12', '9:00', '17:00', 18, 29,TRUE); -- valid
 
 
 --H1: declare_health
@@ -51,6 +54,11 @@ select "declare_health"(1, '2021-11-05', '36');--invalid, resign
 select "declare_health"(4, '2021-11-05', '38');--invalid, exist
 select "declare_health"(4, '2021-11-11', '38');--invalid, future
 select "declare_health"(4, '2020-11-05', '38');--valid, fever
+
+--A1
+select NonCompliance('2021-10-10','2021-10-01'); --invalid: the start date is after end date
+select NonCompliance('2021-10-10','2021-12-10'); --invalid: the end date is in the future
+select NonCompliance('2021-10-10','2021-11-07'); --valid
 
 --A2: view_booking_report
 select * from "view_booking_report"('2020-01-01', 19); -- have records
