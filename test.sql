@@ -43,7 +43,10 @@ call LeaveMeeting(10, 10, '2021-12-05', '13:00', '14:00', 20); --valid: the empl
 call LeaveMeeting(10, 10, '2021-12-05', '13:00', '14:00', 20); --(repeate once more) invalid: the employee has already left
 
 --C6: approve_meeting
-
+select "approve_meeting"( 9, 9, '2021-12-07', '12:00', '17:00', 19, 29,TRUE); -- valid
+select "approve_meeting"( 9, 9, '2021-12-07', '12:00', '17:00', 19, 29,TRUE); -- invalid, The room 9 in floor 9 is already booked at time 12:00:00 and date 2021-12-07
+select "approve_meeting"( 10, 10, '2021-12-07', '12:00', '17:00', 20, 22,TRUE); -- invalid,  Manager 22 is resigned!
+select "approve_meeting"( 9, 9, '2021-12-12', '9:00', '17:00', 18, 29,TRUE); -- valid
 
 
 --H1: declare_health
