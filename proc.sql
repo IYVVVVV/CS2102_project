@@ -682,7 +682,7 @@ BEGIN
 
     SELECT count(booker_id) INTO booker_count FROM Sessions 
     WHERE sfloor= floor_num AND room=room_num AND stime>=start_hour AND stime<end_hour AND sdate=date;
-    IF count<>1 THEN
+    IF booker_count<>1 THEN
         RAISE 'The time range is not booked by a single employee';
     END IF;
 
