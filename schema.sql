@@ -137,3 +137,13 @@ CREATE TABLE Joins (
     )
 );
 
+-- contact_tracing
+CREATE TABLE Close_Contacts (
+    eid         INTEGER,
+    affect_date DATE,
+    PRIMARY KEY (eid, affect_date),
+    FOREIGN KEY (eid) REFERENCES Employees (eid)
+);
+
+
+

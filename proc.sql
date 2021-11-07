@@ -254,18 +254,21 @@ begin
         
     update Employees set resigned_date = _resigned_date where eid = _eid;
     
-    -- remove his booking session ans all joins
+    -- remove his future booking session ans all joins
     -- remove joins first
-    FOR session_to_remove IN SELECT * FROM Sessions WHERE Sessions.booker_id=_eid LOOP
+    FOR session_to_remove IN SELECT * FROM Sessions WHERE Sessions.booker_id=_eid and Sessions.sdate > _resigned_date
+    LOOP
         delete from Joins as j where j.room = session_to_remove.room and j.jfloor = session_to_remove.sfloor 
                                 and j.jtime = session_to_remove.stime and j.jdate = session_to_remove.sdate;
     END LOOP;
     -- remove sessions then
-    delete from Sessions where Sessions.booker_id = _eid;
+    delete from Sessions where Sessions.booker_id = _eid and Sessions.sdate > _resigned_date;
 
-    --rollback approval for meetings if eid is the manager who approved the meeting
-    update Sessions set manager_id = NULL where manager_id = _eid;
+    --remove his future joins
+    delete from Joins where Joins.eid = _eid and Joins.jdate > _resigned_date;
 
+    --rollback approval for future meetings if eid is the manager who approved the meeting
+    update Sessions set manager_id = NULL where manager_id = _eid and Sessions.sdate > _resigned_date;
     return 0;
 
 end;
@@ -584,27 +587,122 @@ $$ LANGUAGE plpgsql;
 /* 
  * Health_2: used for contact tracing
  * input: 
- * output:
+ * output: a list of eid as close contacts
+ * by default, we assume the date is today, and today's meeting
  */
---create or replace function contact_tracing
-CREATE OR REPLACE FUNCTION contact_tracing (IN fever_eid INT, IN fever_date DATE)
-RETURN TABLE (eid INT)
+CREATE OR REPLACE FUNCTION contact_tracing (IN _eid INT)
+RETURNS TABLE (eid INT)
 AS $$
-	--REMOVE eid from all future meetings
-	DELETE FROM Joins WHERE eid=fever_eid AND jdate>= now()::date
-	--Cancel booking不知道怎么写
-	--收回booking权限也不知道怎么写，可以在book的函数里检查fever，这里可以不写。
-	--FIND all the eids in same session in the past three days
-	FOR contact_eid IN SELECT eid INTO  FROM Joins WHERE  (room, jfloor,jdate, jtime) IN
-	(
-		SELECT (room, jfloor, jdate, jtime)
-		FROM Joins 
-		WHERE eid=fever_eid AND jdate <= fever_date -3
-	) LOOP -- delete the contact_eid from meetings in future 7 days
-		RETURN NEXT contact_eid;
-		DELETE FROM Joins WHERE eid=contact_eid AND jdate>=now()::date AND jdate<=now()::date +7;
-	END LOOP;
+declare
+    current_eid int;
+    num_records int := 0;
+    _affected_date date;
+    session_to_remove record;
+    close_contact_eid int;
+    close_contact_session_to_remove record;
+begin
+    -- check eid is valid
+    select Employees.eid from Employees where Employees.eid = _eid into current_eid;
+    if current_eid is null then
+        raise exception 'Contact tracing failed. No employee with the given eid.';
+    end if;
+	-- check eid is having fever
+    select count(*) into num_records from Health_declarations
+        where Health_declarations.eid = _eid and hdate = now()::date;
+    if num_records = 0 then
+        raise exception 'Contact tracing failed. No temperature declared today';
+    end if;
+
+    if not (select fever from Health_declarations where Health_declarations.eid = _eid and hdate = now()::date) then
+        raise notice 'The employee does not have fever today.';
+        return;
+    end if;
+	-- if have fever, perform contact tracing
+	-- for eid himself
+    -- remove his future bookings and other's join
+    -- remove joins first
+    FOR session_to_remove IN SELECT * FROM Sessions WHERE Sessions.booker_id=_eid and Sessions.sdate > now()::date
+    LOOP
+        delete from Joins as j where j.room = session_to_remove.room and j.jfloor = session_to_remove.sfloor 
+                                and j.jtime = session_to_remove.stime and j.jdate = session_to_remove.sdate;
+    END LOOP;
+    -- remove sessions then
+    delete from Sessions where Sessions.booker_id = _eid and Sessions.sdate > now()::date;
+
+    -- remove his future joins
+    delete from Joins where Joins.eid = _eid and Joins.jdate > now()::date;
+
+    -- find his close contacts (same approved meetings in D-3 to D)
+    For close_contact_eid in (
+        select jo.eid
+        from Sessions as ss, Joins as jo
+        where ss.manager_id is not NULL and jo.eid <> _eid
+            and ss.sdate <= now()::date and ss.sdate >= (now():: date - 3)
+            and jo.room = ss.room and jo.jfloor = ss.sfloor
+            and jo.jtime = ss.stime and jo.jdate = ss.sdate
+            and exists (select * from Joins as jo2 where jo2.eid = _eid
+                and jo2.room = ss.room and jo2.jfloor = ss.sfloor
+                and jo2.jtime = ss.stime and jo2.jdate = ss.sdate
+            )
+        )
+    LOOP
+    -- updates Close_Contacts table (add affect_date D+1 to D+7)
+        _affected_date = now()::date + 1;
+        WHILE _affected_date <= now()::date + 7 LOOP
+            -- check primary key constraint before insert
+            INSERT INTO Close_Contacts(eid, affected_date) VALUES (close_contact_eid, _affected_date);
+            _affected_date := _affected_date + 1;
+        END LOOP;
+    -- remove their future bookings and other's join (D+1 to D+7)
+        -- remove joins first
+        FOR close_contact_session_to_remove IN SELECT * FROM Sessions WHERE Sessions.booker_id=close_contact_eid 
+            and Sessions.sdate >= now()::date + 1 and Sessions.sdate <= now()::date + 7
+        LOOP
+            delete from Joins where Joins.room = close_contact_session_to_remove.room and Joins.jfloor = close_contact_session_to_remove.sfloor 
+                                    and Joins.jtime = close_contact_session_to_remove.stime and Joins.jdate = close_contact_session_to_remove.sdate;
+        END LOOP;
+        -- remove sessions then
+        delete from Sessions where Sessions.booker_id=close_contact_eid 
+            and Sessions.sdate >= now()::date + 1 and Sessions.sdate <= now()::date + 7;
+    -- remove their future joins (D+1 to D+7)
+        delete from Joins where Joins.eid = close_contact_eid and Joins.jdate >= now()::date+1 and Joins.jdate <= now()::date+7;
+    END LOOP;
+
+    return query 
+        select jo.eid
+        from Sessions as ss, Joins as jo
+        where ss.manager_id is not NULL and jo.eid <> _eid
+            and ss.sdate <= now()::date and ss.sdate >= (now():: date - 3)
+            and jo.room = ss.room and jo.jfloor = ss.sfloor
+            and jo.jtime = ss.stime and jo.jdate = ss.sdate
+            and exists (select * from Joins as jo2 where jo2.eid = _eid
+                and jo2.room = ss.room and jo2.jfloor = ss.sfloor
+                and jo2.jtime = ss.stime and jo2.jdate = ss.sdate);
+end;
 $$LANGUAGE plpgsql;
+
+-- For session_affected in select * from Sessions
+    --     where Sessions.manager_id is not NULL
+    --         and Sessions.sdate <= now()::date and Sessions.sdate >= (now():: date - 3)
+    --         and exists (select * from Joins where Joins.eid = _eid and Joins.room = Sessions.room and Joins.jfloor = Sessions.sfloor
+    --                     and Joins.jtime = Sessions.stime and Joins.jdate = Sessions.sdate)
+    -- LOOP
+    -- END LOOP;
+
+    -- --REMOVE eid from all future meetings
+    -- DELETE FROM Joins WHERE eid=fever_eid AND jdate>= now()::date
+    -- --Cancel booking不知道怎么写
+    -- --收回booking权限也不知道怎么写，可以在book的函数里检查fever，这里可以不写。
+    -- --FIND all the eids in same session in the past three days
+    -- FOR contact_eid IN SELECT eid INTO  FROM Joins WHERE  (room, jfloor,jdate, jtime) IN
+    -- (
+    --  SELECT (room, jfloor, jdate, jtime)
+    --  FROM Joins 
+    --  WHERE eid=fever_eid AND jdate <= fever_date -3
+    -- ) LOOP -- delete the contact_eid from meetings in future 7 days
+    --  RETURN NEXT contact_eid;
+    --  DELETE FROM Joins WHERE eid=contact_eid AND jdate>=now()::date AND jdate<=now()::date +7;
+    -- END LOOP;
 
 /* 
  * Admin_1: find all employees that do not comply with the daily health declaration 
