@@ -857,12 +857,15 @@ $$LANGUAGE plpgsql;
  * input: 
  * output:
  */
---create or replace function non_compliance
 CREATE OR REPLACE FUNCTION NonCompliance (IN sdate DATE, IN edate DATE)
 RETURNS TABLE(EmployeeID INT, NumberOfDays INT) AS $$
 BEGIN 
     IF sdate > edate THEN
-    raise exception 'Calcalue failed because start date is after end date.';
+        raise exception 'Compliance tracing failed. The start date is after end date.';
+    END IF;
+    
+    IF edate > now()::date THEN
+        raise exception 'Compliance tracing failed. The end date is in the future.';
     END IF;
 
     RETURN QUERY
