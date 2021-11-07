@@ -861,12 +861,45 @@ BEGIN
     END IF;
 
     RETURN QUERY
-        SELECT e.eid AS EmployeeID, (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int))
+        SELECT e.eid AS EmployeeID, CASE 
+            -- the employee resigned between start date and end date.
+            WHEN e.resigned_date IS NOT NULL AND e.resigned_date > sdate AND e.resigned_date < edate THEN 
+                (((edate - resigned_date) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int)) 
+            -- the employee do not resign or will resign after end date.
+            ELSE 
+                (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int)) 
+        END 
         FROM Employees e
-        WHERE (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - sdate)+1)
+            -- The employee do not resign or will resign after end date.
+        WHERE (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - sdate)+1) 
+            -- For the employee who will resign before end date and after start date, the number of health declarations should equal to the number of dates from start date to resign date
+            AND (e.resigned_date IS NULL 
+                OR (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - e.resigned_date)+1) )
+            -- The employee resigned before the start date. Then no need to check the compliance of health declaration
+            AND (e.resigned_date IS NULL OR e.resigned_date > sdate)
+            AND (SELECT COUNT(*) FROM Employees e2 WHERE e2.eid = e.eid AND resigned_date IS NOT NULL AND resigned_date < sdate) = 0 
         ORDER BY (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int)) DESC;
 END;
 $$ LANGUAGE plpgsql;
+-- Can try importing the following function(version without consideration of resigned_date) and run the valid test sentence in test.sql to see difference.
+-- CREATE OR REPLACE FUNCTION NonCompliance (IN sdate DATE, IN edate DATE)
+-- RETURNS TABLE(EmployeeID INT, NumberOfDays INT) AS $$
+-- BEGIN 
+--     IF sdate > edate THEN
+--         raise exception 'Compliance tracing failed. The start date is after end date.';
+--     END IF;
+    
+--     IF edate > now()::date THEN
+--         raise exception 'Compliance tracing failed. The end date is in the future.';
+--     END IF;
+
+--     RETURN QUERY
+--         SELECT e.eid AS EmployeeID, (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int))
+--         FROM Employees e
+--         WHERE (SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) <> ((edate - sdate)+1)
+--         ORDER BY (((edate - sdate) + 1) - cast((SELECT COUNT(*) FROM Health_declarations h WHERE h.eid = e.eid) as int)) DESC;
+-- END;
+-- $$ LANGUAGE plpgsql;
 
 
 /* 
